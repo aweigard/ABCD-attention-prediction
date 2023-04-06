@@ -4,6 +4,7 @@ rm(list=ls())
 library(lavaan)
 library(psych)
 library(stringi)
+library(mice)
 
 #####################################################
 ######### 1. Select participants ####################
@@ -28,7 +29,7 @@ abcd_lt01.base<-abcd_lt01[abcd_lt01$eventname=="baseline_year_1_arm_1",]
 family.site<-merge(acspsw03.base[,c("subjectkey","rel_family_id")],
                    abcd_lt01.base[,c("subjectkey","site_id_l")])
 
-# seven families have individuals at multiple sites
+# several families have individuals at multiple sites
 sort(rowSums(table(family.site[,2:3])==0))[1:10]
 
 # how complete are the columns for the Attention scales?
@@ -46,25 +47,35 @@ abcd_cbcl01$pc.A2<-rowMeans(!is.na(abcd_cbcl01[,cbcl.ADHD.cols]))
 abcd_bpmt01$pc.A<-rowMeans(!is.na(abcd_bpmt01[,bpmt.Attention.cols]!=""))
 
 # exclude anyone with missing data
-abcd_cbcl01.inc<-abcd_cbcl01[abcd_cbcl01$pc.A1==1 & abcd_cbcl01$pc.A2==1,]
-abcd_bpmt01.inc<-abcd_bpmt01[abcd_bpmt01$pc.A==1,]
+cbcl.inc<-(abcd_cbcl01$pc.A1==1 & abcd_cbcl01$pc.A2==1)
+bpmt.inc<-(abcd_bpmt01$pc.A==1)
 
-# break into separate data sets for baseline ("base")
-# and year 1 ("y1")
-cbcl.base<-abcd_cbcl01.inc$eventname=="baseline_year_1_arm_1"
-cbcl.y1<-abcd_cbcl01.inc$eventname=="1_year_follow_up_y_arm_1"
-bpmt.base<-abcd_bpmt01.inc$eventname=="baseline_year_1_arm_1"
-bpmt.y1<-abcd_bpmt01.inc$eventname=="1_year_follow_up_y_arm_1"
+# break into separate data sets for baseline ("base"),
+# year 1 ("y1"), and year 2("y2)
+cbcl.base<-abcd_cbcl01$eventname=="baseline_year_1_arm_1"
+cbcl.y1<-abcd_cbcl01$eventname=="1_year_follow_up_y_arm_1"
+cbcl.y2<-abcd_cbcl01$eventname=="2_year_follow_up_y_arm_1"
+bpmt.base<-abcd_bpmt01$eventname=="baseline_year_1_arm_1"
+bpmt.y1<-abcd_bpmt01$eventname=="1_year_follow_up_y_arm_1"
+bpmt.y2<-abcd_bpmt01$eventname=="2_year_follow_up_y_arm_1"
+
 
 # included samples with complete data
 
-cbcl.base.subs<-abcd_cbcl01.inc[cbcl.base,"subjectkey"]
-bpmt.base.subs<-abcd_bpmt01.inc[bpmt.base,"subjectkey"]
+cbcl.base.subs<-abcd_cbcl01[cbcl.inc & cbcl.base,"subjectkey"]
+bpmt.base.subs<-abcd_bpmt01[bpmt.inc & bpmt.base,"subjectkey"]
 base.all<-cbcl.base.subs[cbcl.base.subs%in%bpmt.base.subs]
 
-cbcl.y1.subs<-abcd_cbcl01.inc[cbcl.y1,"subjectkey"]
-bpmt.y1.subs<-abcd_bpmt01.inc[bpmt.y1,"subjectkey"]
+cbcl.y1.subs<-abcd_cbcl01[cbcl.inc & cbcl.y1,"subjectkey"]
+bpmt.y1.subs<-abcd_bpmt01[bpmt.inc & bpmt.y1,"subjectkey"]
 y1.all<-cbcl.y1.subs[cbcl.y1.subs%in%bpmt.y1.subs]
+
+cbcl.y2.subs<-abcd_cbcl01[cbcl.inc & cbcl.y2,"subjectkey"]
+bpmt.y2.subs<-abcd_bpmt01[bpmt.inc & bpmt.y2,"subjectkey"]
+y2.all<-cbcl.y2.subs[cbcl.y2.subs%in%bpmt.y2.subs]
+
+
+# same but regardless of completion
 
 # not bad Ns
 
@@ -74,17 +85,50 @@ length(base.all)
 length(y1.all)
 # [1] 5915
 
+length(y2.all)
+#[1] 4164
+
 # merge data for each
 
-base.dat<-merge(abcd_cbcl01.inc[abcd_cbcl01.inc$subjectkey%in%base.all & cbcl.base,],
-            abcd_bpmt01.inc[abcd_bpmt01.inc$subjectkey%in%base.all & bpmt.base,c("subjectkey",bpmt.Attention.cols)])
+base.dat<-merge(abcd_cbcl01[abcd_cbcl01$subjectkey%in%base.all & cbcl.base,],
+            abcd_bpmt01[abcd_bpmt01$subjectkey%in%base.all & bpmt.base,c("subjectkey",bpmt.Attention.cols)])
 
-y1.dat<-merge(abcd_cbcl01.inc[abcd_cbcl01.inc$subjectkey%in%y1.all & cbcl.y1,],
-                abcd_bpmt01.inc[abcd_bpmt01.inc$subjectkey%in%y1.all & bpmt.y1,c("subjectkey",bpmt.Attention.cols)])
+y1.dat<-merge(abcd_cbcl01[abcd_cbcl01$subjectkey%in%y1.all & cbcl.y1,],
+                abcd_bpmt01[abcd_bpmt01$subjectkey%in%y1.all & bpmt.y1,c("subjectkey",bpmt.Attention.cols)])
+
+y2.dat<-merge(abcd_cbcl01[abcd_cbcl01$subjectkey%in%y2.all & cbcl.y2,],
+              abcd_bpmt01[abcd_bpmt01$subjectkey%in%y2.all & bpmt.y2,c("subjectkey",bpmt.Attention.cols)])
+
+
+# merge full sample data sets (regardless of missingness)
+
+base.dat.full<-merge(data.frame(subjectkey=unique(acspsw03$subjectkey)),
+                     abcd_cbcl01[abcd_cbcl01$eventname=="baseline_year_1_arm_1",],all.x=TRUE)
+base.dat.full<-merge(base.dat.full,
+                     abcd_bpmt01[abcd_bpmt01$eventname=="baseline_year_1_arm_1",c("subjectkey",bpmt.Attention.cols)],all.x=TRUE)
+
+y1.dat.full<-merge(data.frame(subjectkey=unique(acspsw03$subjectkey)),
+                     abcd_cbcl01[abcd_cbcl01$eventname=="1_year_follow_up_y_arm_1",],all.x=TRUE)
+y1.dat.full<-merge(y1.dat.full,
+                     abcd_bpmt01[abcd_bpmt01$eventname=="1_year_follow_up_y_arm_1",c("subjectkey",bpmt.Attention.cols)],all.x=TRUE)
+
+
+y2.dat.full<-merge(data.frame(subjectkey=unique(acspsw03$subjectkey)),
+                   abcd_cbcl01[abcd_cbcl01$eventname=="2_year_follow_up_y_arm_1",],all.x=TRUE)
+y2.dat.full<-merge(y2.dat.full,
+                   abcd_bpmt01[abcd_bpmt01$eventname=="2_year_follow_up_y_arm_1",c("subjectkey",bpmt.Attention.cols)],all.x=TRUE)
+
 
 # add site and family
+
 base.dat<-merge(base.dat,family.site)
 y1.dat<-merge(y1.dat,family.site)
+y2.dat<-merge(y2.dat,family.site)
+
+base.dat.full<-merge(base.dat.full,family.site)
+y1.dat.full<-merge(y1.dat.full,family.site)
+y2.dat.full<-merge(y2.dat.full,family.site)
+
 
 # remove anyone who has siblings across sites
 
@@ -93,51 +137,28 @@ multi.site.fams<-names(multi.site.fams)
 
 base.dat<-base.dat[!base.dat$rel_family_id%in%multi.site.fams,]
 y1.dat<-y1.dat[!y1.dat$rel_family_id%in%multi.site.fams,]
+y2.dat<-y2.dat[!y2.dat$rel_family_id%in%multi.site.fams,]
 
-#remove site 22 from y1 (small n and not present in baseline)
+base.dat.full<-base.dat.full[!base.dat.full$rel_family_id%in%multi.site.fams,]
+y1.dat.full<-y1.dat.full[!y1.dat.full$rel_family_id%in%multi.site.fams,]
+y2.dat.full<-y2.dat.full[!y2.dat.full$rel_family_id%in%multi.site.fams,]
+
+#remove site 22 (small n)
+base.dat<-base.dat[base.dat$site_id_l!="site22",]
 y1.dat<-y1.dat[y1.dat$site_id_l!="site22",]
+y2.dat<-y2.dat[y2.dat$site_id_l!="site22",]
 
-# year 1 has better Ns per site by a lot
-base.ns<-table(base.dat$site_id_l)
-y1.ns<-table(y1.dat$site_id_l)
+base.dat.full<-base.dat.full[base.dat.full$site_id_l!="site22",]
+y1.dat.full<-y1.dat.full[y1.dat.full$site_id_l!="site22",]
+y2.dat.full<-y2.dat.full[y2.dat.full$site_id_l!="site22",]
 
-# sample one site from each 
-qs<-quantile(y1.ns,probs = c(0,.25,.50,.75))
-qs
-sample(y1.ns[y1.ns>qs[2] & y1.ns<=qs[3]],1)
-# site10 
-# 269 
-sample(y1.ns[y1.ns>qs[3] & y1.ns<=qs[4]],1)
-# site06 
-# 299 
-sample(y1.ns[y1.ns>qs[4]],1)
-# site20 
-# 477 
+# remove anyone with completely missing data across both CBCL and BPMT
 
-# IDs for prediction and validation (i.e., "lockbox") sites 
+all.c<-unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))
 
-v.sites<-c("site10","site06","site20")
-p.sites<-names(y1.ns)[!names(y1.ns)%in%v.sites]
-
-base.p.dat<-base.dat[base.dat$site_id_l%in%p.sites,]
-y1.p.dat<-y1.dat[y1.dat$site_id_l%in%p.sites,]
-
-base.v.dat<-base.dat[base.dat$site_id_l%in%v.sites,]
-y1.v.dat<-y1.dat[y1.dat$site_id_l%in%v.sites,]
-
-
-# convert columns of interest to numeric
-
-for (c in c(bpmt.Attention.cols,cbcl.Attention.cols,cbcl.ADHD.cols)){
-  base.p.dat[,c]<-as.numeric(base.p.dat[,c])
-  base.v.dat[,c]<-as.numeric(base.v.dat[,c])
-  y1.p.dat[,c]<-as.numeric(y1.p.dat[,c])
-  y1.v.dat[,c]<-as.numeric(y1.v.dat[,c])
-}
-
-#save out each
-save(base.p.dat,y1.p.dat,file="prediction_data.RData")
-save(base.v.dat,y1.v.dat,file="validation_data.RData")
+base.dat.full<-base.dat.full[rowSums(is.na(base.dat.full[,all.c]))<length(all.c),]
+y1.dat.full<-y1.dat.full[rowSums(is.na(y1.dat.full[,all.c]))<length(all.c),]
+y2.dat.full<-y2.dat.full[rowSums(is.na(y2.dat.full[,all.c]))<length(all.c),]
 
 # determine who can be included in hierarchical
 # fitting subgroup for DDM analyses
@@ -160,6 +181,7 @@ hier.ddm<-hier.ddm[!hier.ddm$site_id_l%in%v.sites,]
 
 hier.ddm<-hier.ddm[!hier.ddm$subjectkey%in%base.all,]
 hier.ddm<-hier.ddm[!hier.ddm$subjectkey%in%y1.all,]
+hier.ddm<-hier.ddm[!hier.ddm$subjectkey%in%y2.all,]
 
 hier.ddm<-hier.ddm$subjectkey
 
@@ -167,190 +189,88 @@ write.csv(hier.ddm,
           file="hier_DDM_eligible_ADHD_proj.csv",
           row.names = FALSE)
 
+# make sure prior sample individuals are removed from all data sets 
+prior.ids<-read.csv("subsample_ADHD_project.csv")
 
-#####################################################
-######### 2. Bifactor Measurement Model #############
-#####################################################
+base.dat$subjectkey[base.dat$subjectkey%in%prior.ids$x]
+y1.dat$subjectkey[y1.dat$subjectkey%in%prior.ids$x]
+y2.dat$subjectkey[y2.dat$subjectkey%in%prior.ids$x]
 
-# fit bifactor models
+base.dat.full<-base.dat.full[!base.dat.full$subjectkey%in%prior.ids$x,]
+y1.dat.full<-y1.dat.full[!y1.dat.full$subjectkey%in%prior.ids$x,]
+y2.dat.full<-y2.dat.full[!y2.dat.full$subjectkey%in%prior.ids$x,]
 
-load("prediction_data.RData")
+###########################################
+### Select training and validation data ###
+###########################################
 
-# to prevent family nesting from affecting standard errors, 
-# randomly sample cases from each family
-source("ABCD_family_subsample.R")
+# year 1 has better Ns per site by a lot
+base.ns<-table(base.dat$site_id_l)
+y1.ns<-table(y1.dat$site_id_l)
 
-base.SEM<-abcd.fam.subsample(base.p.dat)
-y1.SEM<-abcd.fam.subsample(y1.p.dat)
-save(base.SEM,y1.SEM,file="SEM_data_final.RData")
+# sample one site from each 
+qs<-quantile(y1.ns,probs = c(0,.25,.50,.75))
+qs
+sample(y1.ns[y1.ns>qs[2] & y1.ns<=qs[3]],1)
+# site10 
+sample(y1.ns[y1.ns>qs[3] & y1.ns<=qs[4]],1)
+# site06 
+sample(y1.ns[y1.ns>qs[4]],1)
+# site20 
 
-comp.cbcl.cols<-unique(c(cbcl.ADHD.cols,cbcl.Attention.cols))
+# IDs for prediction and validation (i.e., "lockbox") sites 
 
-bf.comp <- paste(" Attn =~ ",paste(c(bpmt.Attention.cols,comp.cbcl.cols),collapse=" + "),
-                 " Parent =~ ",paste(comp.cbcl.cols,collapse=" + "),
-                 " Teacher =~ ",paste(bpmt.Attention.cols,collapse=" + "),
-                 " Attn ~~ 0*Parent 
-                      Attn ~~ 0*Teacher
-                      Parent ~~ 0*Teacher
-                      ",sep="\n")
+v.sites<-c("site10","site06","site20")
+p.sites<-names(y1.ns)[!names(y1.ns)%in%v.sites]
 
+base.p.dat<-base.dat[base.dat$site_id_l%in%p.sites,]
+y1.p.dat<-y1.dat[y1.dat$site_id_l%in%p.sites,]
+y2.p.dat<-y2.dat[y2.dat$site_id_l%in%p.sites,]
 
-base.model.comp = cfa(bf.comp,data=base.SEM,  
-                      std.lv=TRUE,
-                      orthogonal=TRUE,
-                      estimator = "WLSMV") 
-summary(base.model.comp,fit=TRUE,standardized=TRUE)
-
-
-y1.model.comp = cfa(bf.comp,data=y1.SEM,  
-                      std.lv=TRUE,
-                      orthogonal=TRUE,
-                      estimator = "WLSMV") 
-summary(y1.model.comp,fit=TRUE,standardized=TRUE)
-
-sum.paper<-summary(y1.model.comp,fit=TRUE,standardized=TRUE)
-write.csv(sum.paper$PE,file="loadings.csv")
+base.v.dat<-base.dat[base.dat$site_id_l%in%v.sites,]
+y1.v.dat<-y1.dat[y1.dat$site_id_l%in%v.sites,]
+y2.v.dat<-y2.dat[y2.dat$site_id_l%in%v.sites,]
 
 
-# remove loadings for items with weak (<0.30) relations
-# with each factor in larger (y1) sample
+base.full.p.dat<-base.dat.full[base.dat.full$site_id_l%in%p.sites,]
+y1.full.p.dat<-y1.dat.full[y1.dat.full$site_id_l%in%p.sites,]
+y2.full.p.dat<-y2.dat.full[y2.dat.full$site_id_l%in%p.sites,]
 
-# weak on general attention factor 
-# (makes sense, as not core ADHD Sx.): 
-# cbcl_q13_p - Confused or seems to be in a fog
-# cbcl_q45_p - Nervous, highstrung, or tense
-# cbcl_q62_p - Poorly coordinated or clumsy
-# cbcl_q80_p - Stares blankly
+base.full.v.dat<-base.dat.full[base.dat.full$site_id_l%in%v.sites,]
+y1.full.v.dat<-y1.dat.full[y1.dat.full$site_id_l%in%v.sites,]
+y2.full.v.dat<-y2.dat.full[y2.dat.full$site_id_l%in%v.sites,]
 
-# weak on parent specific factor 
-# (these are core ADHD Sx.): 
-# cbcl_q01_p - Acts too young for his/her age 
-# cbcl_q61_p - Poor school work
+# convert columns of interest to numeric
 
-cbcl.cols.final<-comp.cbcl.cols[!comp.cbcl.cols%in%c("cbcl_q01_p",
-                                                     "cbcl_q61_p")]
-
-Attn.cols.final<-c(bpmt.Attention.cols,comp.cbcl.cols)
-Attn.cols.final<-Attn.cols.final[!Attn.cols.final%in%c("cbcl_q13_p",
-                                                       "cbcl_q45_p",
-                                                       "cbcl_q62_p",
-                                                       "cbcl_q80_p")]
-
-bf.final <- paste(" Attn =~ ",paste(Attn.cols.final,collapse=" + "),
-                 " Parent =~ ",paste(cbcl.cols.final,collapse=" + "),
-                 " Teacher =~ ",paste(bpmt.Attention.cols,collapse=" + "),
-                 " Attn ~~ 0*Parent 
-                      Attn ~~ 0*Teacher
-                      Parent ~~ 0*Teacher
-                      ",sep="\n")
+for (c in c(bpmt.Attention.cols,cbcl.Attention.cols,cbcl.ADHD.cols)){
+  base.p.dat[,c]<-as.numeric(base.p.dat[,c])
+  base.v.dat[,c]<-as.numeric(base.v.dat[,c])
+  y1.p.dat[,c]<-as.numeric(y1.p.dat[,c])
+  y1.v.dat[,c]<-as.numeric(y1.v.dat[,c])
+  y2.p.dat[,c]<-as.numeric(y2.p.dat[,c])
+  y2.v.dat[,c]<-as.numeric(y2.v.dat[,c])
+  base.full.p.dat[,c]<-as.numeric(base.full.p.dat[,c])
+  base.full.v.dat[,c]<-as.numeric(base.full.v.dat[,c])
+  y1.full.p.dat[,c]<-as.numeric(y1.full.p.dat[,c])
+  y1.full.v.dat[,c]<-as.numeric(y1.full.v.dat[,c])
+  y2.full.p.dat[,c]<-as.numeric(y2.full.p.dat[,c])
+  y2.full.v.dat[,c]<-as.numeric(y2.full.v.dat[,c])}
 
 
-base.model.final = cfa(bf.final,data=base.SEM,  
-                      std.lv=TRUE,
-                      orthogonal=TRUE,
-                      estimator = "WLSMV") 
-summary(base.model.final,fit=TRUE,standardized=TRUE)
+#save out each
+save(base.p.dat,y1.p.dat,y1.p.dat,
+     file="prediction_data.RData")
+save(base.v.dat,y1.v.dat,y2.v.dat,
+     file="validation_data.RData")
+save(base.full.p.dat,y1.full.p.dat,y2.full.p.dat,
+     file="prediction_data_full.RData")
+save(base.full.v.dat,y1.full.v.dat,y2.full.v.dat,
+     file="validation_data_full.RData")
 
 
-y1.model.final = cfa(bf.final,data=y1.SEM,  
-                    std.lv=TRUE,
-                    orthogonal=TRUE,
-                    estimator = "WLSMV") 
-summary(y1.model.final,fit=TRUE,standardized=TRUE)
-
-sum.paper.constrained<-summary(y1.model.final,fit=TRUE,standardized=TRUE)
-write.csv(sum.paper.constrained$PE,file="loadings_constrained.csv")
-
-
-
-# factor scores across all models and data sets
-
-base.SEM$Gen.bmod<-lavPredict(base.model.final)[,"Attn"]
-base.SEM$Parent.bmod<-lavPredict(base.model.final)[,"Parent"]
-base.SEM$Teacher.bmod<-lavPredict(base.model.final)[,"Teacher"]
-
-base.SEM$Gen.y1mod<-lavPredict(y1.model.final,newdata = base.SEM)[,"Attn"]
-base.SEM$Parent.y1mod<-lavPredict(y1.model.final,newdata = base.SEM)[,"Parent"]
-base.SEM$Teacher.y1mod<-lavPredict(y1.model.final,newdata = base.SEM)[,"Teacher"]
-
-y1.SEM$Gen.y1mod<-lavPredict(y1.model.final)[,"Attn"]
-y1.SEM$Parent.y1mod<-lavPredict(y1.model.final)[,"Parent"]
-y1.SEM$Teacher.y1mod<-lavPredict(y1.model.final)[,"Teacher"]
-
-y1.SEM$Gen.y1mod.unconstrained<-lavPredict(y1.model.comp)[,"Attn"]
-cor(y1.SEM$Gen.y1mod.unconstrained,y1.SEM$Gen.y1mod)
-
-y1.SEM$Gen.bmod<-lavPredict(base.model.final,newdata = y1.SEM)[,"Attn"]
-y1.SEM$Parent.bmod<-lavPredict(base.model.final,newdata = y1.SEM)[,"Parent"]
-y1.SEM$Teacher.bmod<-lavPredict(base.model.final,newdata = y1.SEM)[,"Teacher"]
-
-# relations between general factors from each of the models 
-# (y1, baseline) when applied to each data set
-
-cor(base.SEM$Gen.bmod,base.SEM$Gen.y1mod)
-# [1] 0.9984602
-
-cor(y1.SEM$Gen.bmod,y1.SEM$Gen.y1mod)
-#[1] 0.9984623
-
-# test-retest reliability
-
-ids.both<-base.SEM$subjectkey[base.SEM$subjectkey %in% y1.SEM$subjectkey]
-fs.cols<-c("subjectkey","Gen.bmod","Gen.y1mod")
-
-base.ids.both<-base.SEM[base.SEM$subjectkey%in%ids.both,fs.cols]
-y1.ids.both<-y1.SEM[y1.SEM$subjectkey%in%ids.both,fs.cols]
-
-colnames(base.ids.both)<-c("subjectkey","Gen.bmod.base","Gen.y1mod.base")
-colnames(y1.ids.both)<-c("subjectkey","Gen.bmod.y1","Gen.y1mod.y1")
-
-test.retest<-merge(base.ids.both,y1.ids.both,by="subjectkey")
-
-#model fit separately to each sample
-ICC(test.retest[,c("Gen.bmod.base","Gen.y1mod.y1")])
-# Intraclass correlation coefficients 
-# type  ICC   F  df1  df2        p
-# Single_raters_absolute   ICC1 0.77 7.7 1565 1566 1.0e-307
-# Single_random_raters     ICC2 0.77 7.7 1565 1565 1.5e-307
-# Single_fixed_raters      ICC3 0.77 7.7 1565 1565 1.5e-307
-# Average_raters_absolute ICC1k 0.87 7.7 1565 1566 1.0e-307
-# Average_random_raters   ICC2k 0.87 7.7 1565 1565 1.5e-307
-# Average_fixed_raters    ICC3k 0.87 7.7 1565 1565 1.5e-307
-
-#base model fit to both samples
-ICC(test.retest[,c("Gen.bmod.base","Gen.bmod.y1")])
-
-#y1 model fit to both samples
-ICC(test.retest[,c("Gen.y1mod.base","Gen.y1mod.y1")])
-
-# fit to entire baseline and y1 prediction samples
-
-base.model.full = cfa(bf.final,data=base.p.dat,  
-                      std.lv=TRUE,
-                      orthogonal=TRUE,
-                      estimator = "WLSMV") 
-summary(base.model.full,fit=TRUE,standardized=TRUE)
-
-
-y1.model.full = cfa(bf.final,data=y1.p.dat,  
-                    std.lv=TRUE,
-                    orthogonal=TRUE,
-                    estimator = "WLSMV") 
-summary(y1.model.full,fit=TRUE,standardized=TRUE)
-
-base.p.dat$Gen.Attn<-lavPredict(base.model.full)[,"Attn"]
-base.p.dat$Parent.Attn<-lavPredict(base.model.full)[,"Parent"]
-base.p.dat$Teacher.Attn<-lavPredict(base.model.full)[,"Teacher"]
-
-y1.p.dat$Gen.Attn<-lavPredict(y1.model.full)[,"Attn"]
-y1.p.dat$Parent.Attn<-lavPredict(y1.model.full)[,"Parent"]
-y1.p.dat$Teacher.Attn<-lavPredict(y1.model.full)[,"Teacher"]
-
-write.csv(base.p.dat,file="baseline_attention_fac.csv",row.names = FALSE)
-write.csv(y1.p.dat,file="year1_attention_fac.csv",row.names = FALSE)
 
 ###############################################################
-######### 3. Compute Demographic Variables ####################
+######### 2. Compute Demographic Variables ####################
 ###############################################################
 
 # load in relevant data structures
@@ -521,7 +441,7 @@ write.csv(ABCD.DEAP.demo.small,file="DEAP_reconstructed_demo_r4.csv",row.names =
 
 
 ###############################################################
-######### 4. Compute Stimulant Med Use Variable ###############
+######### 3. Compute Stimulant Med Use Variable ###############
 ###############################################################
 
 # name relevant child medication columns in ABCD data
@@ -597,14 +517,14 @@ non.stim.list<-non.stim.list[non.stim.list$termType!="DF" & non.stim.list$termTy
 
 # finally, add relevant retired rxcuis the their respective lists
 
-CAS.retired<-data.frame(NA,RxNorm.retired.stims$ï..rxcui,
+CAS.retired<-data.frame(NA,RxNorm.retired.stims$rxcui,
                         RxNorm.retired.stims$name,NA,NA,NA,
                         RxNorm.retired.stims$active)
 colnames(CAS.retired)<-colnames(CAS.list)
 CAS.list<-rbind(CAS.list,CAS.retired)
 
 
-non.stim.retired<-data.frame(NA,RxNorm.retired.non.stims$ï..rxcui,
+non.stim.retired<-data.frame(NA,RxNorm.retired.non.stims$rxcui,
                              RxNorm.retired.non.stims$name,NA,NA,NA,
                              RxNorm.retired.non.stims$active)
 colnames(non.stim.retired)<-colnames(non.stim.list)
@@ -634,21 +554,14 @@ ABCD.med.data$only.non.stims<-as.logical((ABCD.med.data$CAS.ADHD-ABCD.med.data$n
 write.csv(ABCD.med.data,"ABCD_ADHD_meds.csv",row.names = FALSE)
 
 #####################################################
-######### 5. Compile  Features ######################
+######### 4. Compile  Features ######################
 #####################################################
 
 
-# variables to be predicted: baseline and year 1 attention ratings
-
-base.attn<-read.csv("baseline_attention_fac.csv")
-y1.attn<-read.csv("year1_attention_fac.csv")
-
-# make comparable data set for validation
+load("prediction_data.RData")
 load("validation_data.RData")
-base.v<-base.v.dat
-base.v[,c("Gen.Attn","Parent.Attn","Teacher.Attn")]<-NA
-year1.v<-y1.v.dat
-year1.v[,c("Gen.Attn","Parent.Attn","Teacher.Attn")]<-NA
+load("prediction_data_full.RData")
+load("validation_data_full.RData")
 
 #demographic data, previously converted to DEAP categories
 
@@ -656,10 +569,21 @@ demo<-read.csv("DEAP_reconstructed_demo_r4.csv")
 demo.cols<-c("subjectkey","age","female","race.4level","hisp","high.educ",
              "married","household.income")
 
-base<-merge(base.attn,demo[,demo.cols],by="subjectkey",all.x=TRUE)
-year1<-merge(y1.attn,demo[,demo.cols],by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,demo[,demo.cols],by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+base<-merge(base.p.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year1<-merge(y1.p.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year2<-merge(y2.p.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full.p.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year1.full<-merge(y1.full.p.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year2.full<-merge(y2.full.p.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+
+base.v<-merge(base.v.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year1.v<-merge(y1.v.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year2.v<-merge(y2.v.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(y1.full.v.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(y2.full.v.dat,demo[,demo.cols],by="subjectkey",all.x=TRUE)
 
 # neighborhood poverty
 
@@ -671,10 +595,21 @@ adi1<-abcd_rhds01[abcd_rhds01$eventname=="baseline_year_1_arm_1",c("subjectkey",
 
 base<-merge(base,adi1,by="subjectkey",all.x=TRUE)
 year1<-merge(year1,adi1,by="subjectkey",all.x=TRUE)
+year2<-merge(year2,adi1,by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,adi1,by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,adi1,by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,adi1,by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,adi1,by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,adi1,by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,adi1,by="subjectkey",all.x=TRUE)
 
-# neighborhood crime, education system, and lead exposuse data
+base.full.v<-merge(base.full.v,adi1,by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,adi1,by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,adi1,by="subjectkey",all.x=TRUE)
+
+# neighborhood crime, education system, and lead exposure data
 
 neighborhood<-abcd_rhds01[abcd_rhds01$eventname=="baseline_year_1_arm_1",
                     c("subjectkey","reshist_addr1_p1tot",
@@ -686,8 +621,19 @@ neighborhood[,2:8]<-apply(neighborhood[,2:8], 2, function(x) as.numeric(x))
 
 base<-merge(base,neighborhood,by="subjectkey",all.x=TRUE)
 year1<-merge(year1,neighborhood,by="subjectkey",all.x=TRUE)
+year2<-merge(year2,neighborhood,by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,neighborhood,by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,neighborhood,by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,neighborhood,by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,neighborhood,by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,neighborhood,by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,neighborhood,by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,neighborhood,by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,neighborhood,by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,neighborhood,by="subjectkey",all.x=TRUE)
 
 # basic needs un-affordability
 
@@ -702,8 +648,19 @@ pdem02$basic_needs_sum<-rowSums(pdem02[,BNU.cols])
 
 base<-merge(base,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,pdem02[,c("subjectkey","basic_needs_sum")],by="subjectkey",all.x=TRUE)
 
 
 # perceived neighborhood safety, parent and youth
@@ -732,9 +689,19 @@ crime.inc<-c("subjectkey","neighborhood_p_sum","neighborhood_crime_y")
 
 base<-merge(base,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
 
+base.full.v<-merge(base.full.v,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,abcd_pnsc01[,crime.inc],by="subjectkey",all.x=TRUE)
 
 # school environment
 
@@ -759,8 +726,19 @@ school<-srpf01[srpf01$visit=="baseline_year_1_arm_1",sch.cols]
 
 base<-merge(base,school,by="subjectkey",all.x=TRUE)
 year1<-merge(year1,school,by="subjectkey",all.x=TRUE)
+year2<-merge(year2,school,by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,school,by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,school,by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,school,by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,school,by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,school,by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,school,by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,school,by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,school,by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,school,by="subjectkey",all.x=TRUE)
 
 
 # SST and Nback scanner task behavior 
@@ -804,8 +782,19 @@ ddm<-ABCD_DDM_base[,ddm.cols]
 
 base<-merge(base,ddm,by="subjectkey",all.x=TRUE)
 year1<-merge(year1,ddm,by="subjectkey",all.x=TRUE)
+year2<-merge(year2,ddm,by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,ddm,by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,ddm,by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,ddm,by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,ddm,by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,ddm,by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,ddm,by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,ddm,by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,ddm,by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,ddm,by="subjectkey",all.x=TRUE)
 
 # other cognitive tasks
 
@@ -849,29 +838,33 @@ lmt[,"lmt_scr_perc_correct"]<-as.numeric(lmt[,"lmt_scr_perc_correct"])
 
 cct<-cct01[cct01$eventname=="baseline_year_1_arm_1",c("subjectkey","cash_choice_task")]
 cct[,"cash_choice_task"]<-as.numeric(cct[,"cash_choice_task"])
-cct[cct$cash_choice_task==3 & !is.na(cct$cash_choice_task),]<-NA
+cct[cct$cash_choice_task==3 & !is.na(cct$cash_choice_task),"cash_choice_task"]<-NA
 cct$cash_choice_task<-(cct$cash_choice_task-1)
 cct$cash_choice_task<- factor(cct$cash_choice_task,
                              levels=0:1,
                              labels= c("no","yes"))
 
 
-base<-merge(base,pearson,by="subjectkey",all.x=TRUE)
-year1<-merge(year1,pearson,by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,pearson,by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,pearson,by="subjectkey",all.x=TRUE)
-base<-merge(base,nihtb,by="subjectkey",all.x=TRUE)
-year1<-merge(year1,nihtb,by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,nihtb,by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,nihtb,by="subjectkey",all.x=TRUE)
-base<-merge(base,lmt,by="subjectkey",all.x=TRUE)
-year1<-merge(year1,lmt,by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,lmt,by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,lmt,by="subjectkey",all.x=TRUE)
-base<-merge(base,cct,by="subjectkey",all.x=TRUE)
-year1<-merge(year1,cct,by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,cct,by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,cct,by="subjectkey",all.x=TRUE)
+other.cog<-merge(pearson,nihtb,by="subjectkey",all=TRUE)
+other.cog<-merge(other.cog,lmt,by="subjectkey",all=TRUE)
+other.cog<-merge(other.cog,cct,by="subjectkey",all=TRUE)
+
+
+base<-merge(base,other.cog,by="subjectkey",all.x=TRUE)
+year1<-merge(year1,other.cog,by="subjectkey",all.x=TRUE)
+year2<-merge(year2,other.cog,by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,other.cog,by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,other.cog,by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,other.cog,by="subjectkey",all.x=TRUE)
+
+base.v<-merge(base.v,other.cog,by="subjectkey",all.x=TRUE)
+year1.v<-merge(year1.v,other.cog,by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,other.cog,by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,other.cog,by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,other.cog,by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,other.cog,by="subjectkey",all.x=TRUE)
 
 # Family conflict (parent and youth)
 
@@ -893,14 +886,23 @@ fes02$conflict_parent<-rowSums(fes02[,p.conf.cols])
 abcd_fes01<-abcd_fes01[abcd_fes01$eventname=="baseline_year_1_arm_1",]
 fes02<-fes02[fes02$eventname=="baseline_year_1_arm_1" & fes02$dataset_id==34291,]
 
-base<-merge(base,abcd_fes01[,c("subjectkey","conflict_youth")],by="subjectkey",all.x=TRUE)
-year1<-merge(year1,abcd_fes01[,c("subjectkey","conflict_youth")],by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,abcd_fes01[,c("subjectkey","conflict_youth")],by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,abcd_fes01[,c("subjectkey","conflict_youth")],by="subjectkey",all.x=TRUE)
-base<-merge(base,fes02[,c("subjectkey","conflict_parent")],by="subjectkey",all.x=TRUE)
-year1<-merge(year1,fes02[,c("subjectkey","conflict_parent")],by="subjectkey",all.x=TRUE)
-base.v<-merge(base.v,fes02[,c("subjectkey","conflict_parent")],by="subjectkey",all.x=TRUE)
-year1.v<-merge(year1.v,fes02[,c("subjectkey","conflict_parent")],by="subjectkey",all.x=TRUE)
+fes<-merge(abcd_fes01,fes02,by="subjectkey",all=TRUE)
+
+base<-merge(base,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year1<-merge(year1,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+
+base.v<-merge(base.v,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year1.v<-merge(year1.v,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,fes[,c("subjectkey","conflict_youth","conflict_parent")],by="subjectkey",all.x=TRUE)
 
 
 # Parental monitoring
@@ -917,8 +919,19 @@ pmq01<-pmq01[pmq01$eventname=="baseline_year_1_arm_1",]
 
 base<-merge(base,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,pmq01[,c("subjectkey","parent_monit")],by="subjectkey",all.x=TRUE)
 
 # BIS/BAS and UPPS
 
@@ -936,8 +949,19 @@ abcd_mhy02<-abcd_mhy02[abcd_mhy02$eventname=="baseline_year_1_arm_1",]
 
 base<-merge(base,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+
+base.full.v<-merge(base.full.v,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,abcd_mhy02[,c("subjectkey",bis.bas,upps)],by="subjectkey",all.x=TRUE)
 
 
 # BMI and waist circumference
@@ -955,10 +979,23 @@ abcd_ant01[(abcd_ant01$BMI>100 | abcd_ant01$BMI<10) & !is.na(abcd_ant01$BMI),]$B
 abcd_ant01<-abcd_ant01[abcd_ant01$eventname=="baseline_year_1_arm_1",]
 
 base<-merge(base,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+
+
+base<-merge(base,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
 
+base.full.v<-merge(base.full.v,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,abcd_ant01[,c("subjectkey","anthro_waist_cm","BMI")],by="subjectkey",all.x=TRUE)
 
 # screen media
 
@@ -976,25 +1013,675 @@ abcd_stq01<-abcd_stq01[abcd_stq01$eventname=="baseline_year_1_arm_1",]
 
 base<-merge(base,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
 
+base.full.v<-merge(base.full.v,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,abcd_stq01[,c("subjectkey","wkdy_screen","wknd_screen")],by="subjectkey",all.x=TRUE)
 
 # Stim meds 
 
 meds<-read.csv("ABCD_ADHD_meds.csv")
 
 base<-merge(base,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+
+base<-merge(base,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
 year1<-merge(year1,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+year2<-merge(year2,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+
+base.full<-merge(base.full,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+year1.full<-merge(year1.full,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+year2.full<-merge(year2.full,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+
 base.v<-merge(base.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
 year1.v<-merge(year1.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+year2.v<-merge(year2.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
 
+base.full.v<-merge(base.full.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+year1.full.v<-merge(year1.full.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
+year2.full.v<-merge(year2.full.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectkey",all.x=TRUE)
 
 # save out data sets
 
 write.csv(base,file="base_full_dat.csv",row.names = F)
 write.csv(year1,file="year1_full_dat.csv",row.names = F)
+write.csv(year2,file="year2_full_dat.csv",row.names = F)
+
+write.csv(base.full,file="base_full_full_dat.csv",row.names = F)
+write.csv(year1.full,file="year1_full_full_dat.csv",row.names = F)
+write.csv(year2.full,file="year2_full_full_dat.csv",row.names = F)
 
 write.csv(base.v,file="base_validation_dat.csv",row.names = F)
 write.csv(year1.v,file="year1_validation_dat.csv",row.names = F)
+write.csv(year2.v,file="year2_validation_dat.csv",row.names = F)
+
+write.csv(base.full.v,file="base_full_validation_dat.csv",row.names = F)
+write.csv(year1.full.v,file="year1_full_validation_dat.csv",row.names = F)
+write.csv(year2.full.v,file="year2_full_validation_dat.csv",row.names = F)
+
+
+#####################################################
+######### 5. Bifactor Measurement Model #############
+#####################################################
+
+# fit bifactor models
+
+load("prediction_data.RData")
+
+# to prevent family nesting from affecting standard errors, 
+# randomly sample cases from each family
+source("ABCD_family_subsample.R")
+
+base.SEM<-abcd.fam.subsample(base.p.dat)
+y1.SEM<-abcd.fam.subsample(y1.p.dat)
+save(base.SEM,y1.SEM,file="SEM_data_final.RData")
+
+full.cbcl.cols<-unique(c(cbcl.ADHD.cols,cbcl.Attention.cols))
+
+bf.comp <- paste(" Attn =~ ",paste(c(bpmt.Attention.cols,comp.cbcl.cols),collapse=" + "),
+                 " Parent =~ ",paste(comp.cbcl.cols,collapse=" + "),
+                 " Teacher =~ ",paste(bpmt.Attention.cols,collapse=" + "),
+                 " Attn ~~ 0*Parent 
+                      Attn ~~ 0*Teacher
+                      Parent ~~ 0*Teacher
+                      ",sep="\n")
+
+
+base.model.comp = cfa(bf.comp,data=base.SEM,  
+                      std.lv=TRUE,
+                      orthogonal=TRUE,
+                      estimator = "WLSMV") 
+summary(base.model.comp,fit=TRUE,standardized=TRUE)
+
+
+y1.model.comp = cfa(bf.comp,data=y1.SEM,  
+                    std.lv=TRUE,
+                    orthogonal=TRUE,
+                    estimator = "WLSMV") 
+summary(y1.model.comp,fit=TRUE,standardized=TRUE)
+
+sum.paper<-summary(y1.model.comp,fit=TRUE,standardized=TRUE)
+write.csv(sum.paper$PE,file="loadings.csv")
+
+
+# remove loadings for items with weak (<0.30) relations
+# with each factor in larger (y1) sample
+
+# weak on general attention factor 
+# (makes sense, as not core ADHD Sx.): 
+# cbcl_q13_p - Confused or seems to be in a fog
+# cbcl_q45_p - Nervous, highstrung, or tense
+# cbcl_q62_p - Poorly coordinated or clumsy
+# cbcl_q80_p - Stares blankly
+
+# weak on parent specific factor 
+# (these are core ADHD Sx.): 
+# cbcl_q01_p - Acts too young for his/her age 
+# cbcl_q61_p - Poor school work
+
+cbcl.cols.final<-comp.cbcl.cols[!comp.cbcl.cols%in%c("cbcl_q01_p",
+                                                     "cbcl_q61_p")]
+
+Attn.cols.final<-c(bpmt.Attention.cols,comp.cbcl.cols)
+Attn.cols.final<-Attn.cols.final[!Attn.cols.final%in%c("cbcl_q13_p",
+                                                       "cbcl_q45_p",
+                                                       "cbcl_q62_p",
+                                                       "cbcl_q80_p")]
+
+bf.final <- paste(" Attn =~ ",paste(Attn.cols.final,collapse=" + "),
+                  " Parent =~ ",paste(cbcl.cols.final,collapse=" + "),
+                  " Teacher =~ ",paste(bpmt.Attention.cols,collapse=" + "),
+                  " Attn ~~ 0*Parent 
+                      Attn ~~ 0*Teacher
+                      Parent ~~ 0*Teacher
+                      ",sep="\n")
+
+
+base.model.final = cfa(bf.final,data=base.SEM,  
+                       std.lv=TRUE,
+                       orthogonal=TRUE,
+                       estimator = "WLSMV") 
+summary(base.model.final,fit=TRUE,standardized=TRUE)
+
+
+y1.model.final = cfa(bf.final,data=y1.SEM,  
+                     std.lv=TRUE,
+                     orthogonal=TRUE,
+                     estimator = "WLSMV") 
+summary(y1.model.final,fit=TRUE,standardized=TRUE)
+
+sum.paper.constrained<-summary(y1.model.final,fit=TRUE,standardized=TRUE)
+write.csv(sum.paper.constrained$PE,file="loadings_constrained.csv")
+
+
+
+# factor scores across all models and data sets
+
+base.SEM$Gen.bmod<-lavPredict(base.model.final)[,"Attn"]
+base.SEM$Parent.bmod<-lavPredict(base.model.final)[,"Parent"]
+base.SEM$Teacher.bmod<-lavPredict(base.model.final)[,"Teacher"]
+
+base.SEM$Gen.y1mod<-lavPredict(y1.model.final,newdata = base.SEM)[,"Attn"]
+base.SEM$Parent.y1mod<-lavPredict(y1.model.final,newdata = base.SEM)[,"Parent"]
+base.SEM$Teacher.y1mod<-lavPredict(y1.model.final,newdata = base.SEM)[,"Teacher"]
+
+y1.SEM$Gen.y1mod<-lavPredict(y1.model.final)[,"Attn"]
+y1.SEM$Parent.y1mod<-lavPredict(y1.model.final)[,"Parent"]
+y1.SEM$Teacher.y1mod<-lavPredict(y1.model.final)[,"Teacher"]
+
+y1.SEM$Gen.y1mod.unconstrained<-lavPredict(y1.model.comp)[,"Attn"]
+cor(y1.SEM$Gen.y1mod.unconstrained,y1.SEM$Gen.y1mod)
+
+y1.SEM$Gen.bmod<-lavPredict(base.model.final,newdata = y1.SEM)[,"Attn"]
+y1.SEM$Parent.bmod<-lavPredict(base.model.final,newdata = y1.SEM)[,"Parent"]
+y1.SEM$Teacher.bmod<-lavPredict(base.model.final,newdata = y1.SEM)[,"Teacher"]
+
+# relations between general factors from each of the models 
+# (y1, baseline) when applied to each data set
+
+cor(base.SEM$Gen.bmod,base.SEM$Gen.y1mod)
+# [1] 0.9984602
+
+cor(y1.SEM$Gen.bmod,y1.SEM$Gen.y1mod)
+#[1] 0.9984623
+
+# test-retest reliability
+
+ids.both<-base.SEM$subjectkey[base.SEM$subjectkey %in% y1.SEM$subjectkey]
+fs.cols<-c("subjectkey","Gen.bmod","Gen.y1mod")
+
+base.ids.both<-base.SEM[base.SEM$subjectkey%in%ids.both,fs.cols]
+y1.ids.both<-y1.SEM[y1.SEM$subjectkey%in%ids.both,fs.cols]
+
+colnames(base.ids.both)<-c("subjectkey","Gen.bmod.base","Gen.y1mod.base")
+colnames(y1.ids.both)<-c("subjectkey","Gen.bmod.y1","Gen.y1mod.y1")
+
+test.retest<-merge(base.ids.both,y1.ids.both,by="subjectkey")
+
+#model fit separately to each sample
+ICC(test.retest[,c("Gen.bmod.base","Gen.y1mod.y1")])
+
+#base model fit to both samples
+ICC(test.retest[,c("Gen.bmod.base","Gen.bmod.y1")])
+
+#y1 model fit to both samples
+ICC(test.retest[,c("Gen.y1mod.base","Gen.y1mod.y1")])
+
+# fit to entire baseline and y1 prediction samples
+
+base.model.full = cfa(bf.final,data=base.p.dat,  
+                      std.lv=TRUE,
+                      orthogonal=TRUE,
+                      estimator = "WLSMV") 
+summary(base.model.full,fit=TRUE,standardized=TRUE)
+
+
+y1.model.full = cfa(bf.final,data=y1.p.dat,  
+                    std.lv=TRUE,
+                    orthogonal=TRUE,
+                    estimator = "WLSMV") 
+summary(y1.model.full,fit=TRUE,standardized=TRUE)
+
+base.p.dat$Gen.Attn<-lavPredict(base.model.full)[,"Attn"]
+base.p.dat$Parent.Attn<-lavPredict(base.model.full)[,"Parent"]
+base.p.dat$Teacher.Attn<-lavPredict(base.model.full)[,"Teacher"]
+
+y1.p.dat$Gen.Attn<-lavPredict(y1.model.full)[,"Attn"]
+y1.p.dat$Parent.Attn<-lavPredict(y1.model.full)[,"Parent"]
+y1.p.dat$Teacher.Attn<-lavPredict(y1.model.full)[,"Teacher"]
+
+write.csv(base.p.dat,file="baseline_attention_fac.csv",row.names = FALSE)
+write.csv(y1.p.dat,file="year1_attention_fac.csv",row.names = FALSE)
+
+
+#####################################################
+######### 6. Multiple Imputation Analyses ###########
+#####################################################
+
+# read in
+
+base<-read.csv("base_full_dat.csv")
+year1<-read.csv("year1_full_dat.csv")
+year2<-read.csv("year2_full_dat.csv")
+
+base.full<-read.csv("base_full_full_dat.csv")
+year1.full<-read.csv("year1_full_full_dat.csv")
+year2.full<-read.csv("year2_full_full_dat.csv")
+
+cbcl.Attention.cols<-c("cbcl_q01_p","cbcl_q08_p","cbcl_q10_p",
+                       "cbcl_q13_p","cbcl_q17_p","cbcl_q41_p",
+                       "cbcl_q45_p","cbcl_q61_p","cbcl_q62_p",
+                       "cbcl_q80_p")
+cbcl.ADHD.cols<-c("cbcl_q04_p","cbcl_q08_p","cbcl_q10_p","cbcl_q41_p",
+                  "cbcl_q78_p","cbcl_q93_p","cbcl_q104_p")
+bpmt.Attention.cols<-c("bpmt_q1","bpmt_q3","bpmt_q4",
+                       "bpmt_q5","bpmt_q9","bpmt_q13")
+
+# identify people with missing teacher data
+
+year1.full$t.missing<-is.na(rowMeans(year1.full[,bpmt.Attention.cols]))
+year2.full$t.missing<-is.na(rowMeans(year2.full[,bpmt.Attention.cols]))
+
+#randomly remove teacher data from 1000 to test imputation efficacy
+
+year1.full.1000<-year1.full
+year1.full.1000$f.miss<-FALSE
+y1.fm<-sample(year1.full.1000[year1.full.1000$t.missing==FALSE,]$subjectkey,1000,FALSE)
+year1.full.1000[year1.full.1000$subjectkey%in%y1.fm,]$f.miss<-TRUE
+year1.full.1000[year1.full.1000$f.miss,bpmt.Attention.cols]<-NA
+
+
+save(year1.full,year2.full,year1.full.1000,file="missing_data_randomized.RData")
+load("missing_data_randomized.RData")
+
+# Impute with MICE and run standard checks
+
+year1.imp <- mice(data = year1.full[,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))],
+                      m = 5,
+                      print = FALSE)
+
+year2.imp <- mice(data = year2.full[,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))],
+                  m = 5,
+                  print = FALSE)
+
+year1.1000.imp <- mice(data = year1.full.1000[,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))],
+                  m = 5,
+                  print = FALSE)
+
+
+### standard MICE checks on BPMT variables ###
+
+# density plots to assess how well the imputed data mimics the distributions of real data:
+
+densityplot(year1.imp, ~  bpmt_q1)
+densityplot(year1.imp, ~  bpmt_q3)
+densityplot(year1.imp, ~  bpmt_q4)
+densityplot(year1.imp, ~  bpmt_q5)
+densityplot(year1.imp, ~  bpmt_q9)
+densityplot(year1.imp, ~  bpmt_q13)
+
+densityplot(year2.imp, ~  bpmt_q1)
+densityplot(year2.imp, ~  bpmt_q3)
+densityplot(year2.imp, ~  bpmt_q4)
+densityplot(year2.imp, ~  bpmt_q5)
+densityplot(year2.imp, ~  bpmt_q9)
+densityplot(year2.imp, ~  bpmt_q13)
+
+# distribution of data by missingness/propensity score
+
+bpmt_q4.na1 <- is.na(year1.full$bpmt_q4)
+bpmt_q13.na1 <- is.na(year1.full$bpmt_q4)
+
+train.bpmt_q4.na1<-complete(year1.1000.imp)
+train.bpmt_q4.na1$miss<-bpmt_q4.na1
+
+train.bpmt_q13.na1<-fulllete(year1.1000.imp)
+train.bpmt_q13.na1$miss<-bpmt_q13.na1
+
+
+fit.bpmt_q4.na1 <- glm(miss ~., train.bpmt_q4.na1,family = binomial)
+ps.bpmt_q4.na1 <- rep(predict(fit.bpmt_q4.na1, type = "response"),4)
+
+fit.bpmt_q13.na1 <- glm(miss ~., train.bpmt_q13.na1,family = binomial)
+ps.bpmt_q13.na1 <- rep(predict(fit.bpmt_q13.na1, type = "response"),4)
+
+xyplot(year1.imp , bpmt_q4 ~ ps.bpmt_q4.na1 | .imp, pch = c(1, 20), cex = c(0.8, 1.2), xlab = "Probability that bpmt_q4 is missing", ylab = "bpmt_q4")
+xyplot(year1.imp , bpmt_q13 ~ ps.bpmt_q13.na1 | .imp, pch = c(1, 20), cex = c(0.8, 1.2), xlab = "Probability that bpmt_q13 is missing", ylab = "bpmt_q13")
+
+# check correlation matrix for imputed versus non-imputed variables of interest
+
+v.int<-c("bpmt_q4","bpmt_q5","bpmt_q13","cbcl_q08_p","cbcl_q80_p")
+
+
+# mostly slightly lower in imputed data
+miss.cm<-cor(complete(year1.imp,action = 0)[,v.int],use="pairwise.complete")
+miss.cm 
+
+miss.cm-cor(complete(year1.imp,action = 1)[,v.int])
+cor(complete(year1.imp,action = 1)[,v.int])
+
+miss.cm-cor(complete(year1.imp,action = 2)[,v.int])
+cor(complete(year1.imp,action = 2)[,v.int])
+
+miss.cm-cor(complete(year1.imp,action = 3)[,v.int])
+cor(complete(year1.imp,action = 3)[,v.int])
+
+miss.cm2<-cor(complete(year2.imp,action = 0)[,v.int],use="pairwise.complete")
+miss.cm2 
+
+miss.cm-miss.cm2
+
+miss.cm2-cor(complete(year2.imp,action = 1)[,v.int])
+cor(complete(year2.imp,action = 1)[,v.int])
+
+miss.cm2-cor(complete(year2.imp,action = 2)[,v.int])
+cor(complete(year2.imp,action = 2)[,v.int])
+
+miss.cm2-cor(complete(year2.imp,action = 3)[,v.int])
+cor(complete(year2.imp,action = 3)[,v.int])
+
+### How well does it do with the 1000 who were randomly treated as missing?
+
+# very low correlations between imputed and actual bpmt items
+
+cor(complete(year1.1000.imp,action = 1)[year1.full.1000$f.miss,"bpmt_q4"],
+     year1.full[year1.full.1000$f.miss,"bpmt_q4"])
+
+cor(complete(year1.1000.imp,action = 1)[year1.full.1000$f.miss,"bpmt_q13"],
+    year1.full[year1.full.1000$f.miss,"bpmt_q13"])
+
+cor(complete(year1.1000.imp,action = 1)[year1.full.1000$f.miss,"bpmt_q5"],
+    year1.full[year1.full.1000$f.miss,"bpmt_q5"])
+
+# some systematic reductions in correlations between cbcl and bpmt items
+
+cm.1000.y1<-cor(year1.full[year1.full.1000$f.miss,v.int],use="pairwise.complete")
+cm.1000.y1
+
+cor(complete(year1.1000.imp,action = 1)[year1.full.1000$f.miss,v.int])
+cm.1000.y1-cor(complete(year1.1000.imp,action = 1)[year1.full.1000$f.miss,v.int])
+
+cor(complete(year1.1000.imp,action = 2)[year1.full.1000$f.miss,v.int])
+cm.1000.y1-cor(complete(year1.1000.imp,action = 2)[year1.full.1000$f.miss,v.int])
+
+cor(complete(year1.1000.imp,action = 3)[year1.full.1000$f.miss,v.int])
+cm.1000.y1-cor(complete(year1.1000.imp,action = 3)[year1.full.1000$f.miss,v.int])
+
+### how does this affect factor structure and factor scores? #####
+
+# data sets for comparison
+
+y1.sem<-year1.full[,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))]
+inc.sem<-!is.na(rowMeans(y1.sem))
+y1.sem<-y1.sem[inc.sem,]
+
+y1.sem.imp<-complete(year1.imp,action = 1)[,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))]
+
+y1.sem.1000<-year1.full[year1.full.1000$f.miss,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))]
+inc.1000<-!is.na(rowMeans(y1.sem.1000))
+y1.sem.1000<-y1.sem.1000[inc.1000,]
+
+y1.sem.1000.imp<-complete(year1.1000.imp,action = 1)[year1.full.1000$f.miss,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))]
+y1.sem.1000.imp<-y1.sem.1000.imp[inc.1000,]
+
+#variables for SEM
+
+comp.cbcl.cols<-unique(c(cbcl.ADHD.cols,cbcl.Attention.cols))
+
+cbcl.cols.final<-comp.cbcl.cols[!comp.cbcl.cols%in%c("cbcl_q01_p",
+                                                     "cbcl_q61_p")]
+
+Attn.cols.final<-c(bpmt.Attention.cols,comp.cbcl.cols)
+Attn.cols.final<-Attn.cols.final[!Attn.cols.final%in%c("cbcl_q13_p",
+                                                       "cbcl_q45_p",
+                                                       "cbcl_q62_p",
+                                                       "cbcl_q80_p")]
+
+bf.final <- paste(" Attn =~ ",paste(Attn.cols.final,collapse=" + "),
+                  " Parent =~ ",paste(cbcl.cols.final,collapse=" + "),
+                  " Teacher =~ ",paste(bpmt.Attention.cols,collapse=" + "),
+                  " Attn ~~ 0*Parent 
+                      Attn ~~ 0*Teacher
+                      Parent ~~ 0*Teacher
+                      ",sep="\n")
+
+# compare full and imputed data set models
+
+
+y1.sem.model = cfa(bf.final,data=y1.sem,  
+                   std.lv=TRUE,
+                   orthogonal=TRUE,
+                   estimator = "WLSMV") 
+y1.sem.sum<-summary(y1.sem.model,fit=TRUE,standardized=TRUE)
+
+y1.sem.imp.model = cfa(bf.final,data=y1.sem.imp,  
+                       std.lv=TRUE,
+                       orthogonal=TRUE,
+                       estimator = "WLSMV") 
+y1.sem.imp.sum<-summary(y1.sem.imp.model,fit=TRUE,standardized=TRUE)
+
+# teacher items contribute systematically less
+plot(y1.sem.sum$PE$std.all[1:6],y1.sem.imp.sum$PE$std.all[1:6],
+     xlim=c(.2,.8),ylim=c(.2,.8),
+     xlab="listwise deletion",
+     ylab="imputation",col="blue");abline(0,1)
+points(y1.sem.sum$PE$std.all[6:16],y1.sem.imp.sum$PE$std.all[6:16],col="red")
+
+# randomly selected 1000 missing people
+
+y1.sem.1000.model = cfa(bf.final,data=y1.sem.1000,  
+                        std.lv=TRUE,
+                        orthogonal=TRUE,
+                        estimator = "WLSMV") 
+y1.sem.1000.sum<-summary(y1.sem.1000.model,fit=TRUE,standardized=TRUE)
+
+y1.sem.1000.imp.model = cfa(bf.final,data=y1.sem.1000.imp,  
+                            std.lv=TRUE,
+                            orthogonal=TRUE,
+                            estimator = "WLSMV") 
+y1.sem.1000.imp.sum<-summary(y1.sem.1000.imp.model,fit=TRUE,standardized=TRUE)
+
+# teacher items contribute even less when imputed
+
+plot(y1.sem.1000.sum$PE$std.all[1:6],y1.sem.1000.imp.sum$PE$std.all[1:6],
+     xlim=c(.2,.8),ylim=c(.2,.8),
+     xlab="listwise deletion",
+     ylab="imputation",col="blue");abline(0,1)
+points(y1.sem.1000.sum$PE$std.all[6:16],y1.sem.1000.imp.sum$PE$std.all[6:16],col="red")
+
+
+y1.sem.full1000.imp<-complete(year1.1000.imp,action = 1)[,unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))]
+
+y1.sem.full1000.imp.model = cfa(bf.final,
+                                data=y1.sem.full1000.imp,  
+                            std.lv=TRUE,
+                            orthogonal=TRUE,
+                            estimator = "WLSMV") 
+
+y1.sem.full1000.imp.sum<-summary(y1.sem.full1000.imp.model,fit=TRUE,standardized=TRUE)
+
+plot(y1.sem.sum$PE$std.all[1:6],y1.sem.full1000.imp.sum$PE$std.all[1:6],
+     xlim=c(.2,.8),ylim=c(.2,.8),
+     xlab="listwise deletion",
+     ylab="imputation",col="blue");abline(0,1)
+points(y1.sem.sum$PE$std.all[6:16],y1.sem.full1000.imp.sum$PE$std.all[6:16],col="red")
+
+# factor scores 
+
+y1.sem$Attn<-lavPredict(y1.sem.model)[,"Attn"]
+y1.sem$Parent<-lavPredict(y1.sem.model)[,"Parent"]
+y1.sem$Teacher<-lavPredict(y1.sem.model)[,"Teacher"]
+
+y1.sem.imp$Attn<-lavPredict(y1.sem.imp.model)[,"Attn"]
+y1.sem.imp$Parent<-lavPredict(y1.sem.imp.model)[,"Parent"]
+y1.sem.imp$Teacher<-lavPredict(y1.sem.imp.model)[,"Teacher"]
+
+y1.sem.full1000.imp$Attn<-lavPredict(y1.sem.full1000.imp.model)[,"Attn"]
+y1.sem.full1000.imp$Parent<-lavPredict(y1.sem.full1000.imp.model)[,"Parent"]
+y1.sem.full1000.imp$Teacher<-lavPredict(y1.sem.full1000.imp.model)[,"Teacher"]
+
+
+cor(y1.sem[,c("Attn","Parent","Teacher")])
+cor(y1.sem.imp[,c("Attn","Parent","Teacher")])
+cor(y1.sem.full1000.imp[,c("Attn","Parent","Teacher")])
+
+plot(y1.sem.imp$Attn[inc.sem],y1.sem$Attn);cor(y1.sem.imp$Attn[inc.sem],y1.sem$Attn)
+cor(y1.sem.imp$Attn[inc.sem],y1.sem$Attn);cor(y1.sem.imp$Attn[inc.sem],y1.sem$Attn)
+#[1] 0.9996569
+
+plot(y1.sem.full1000.imp$Attn[year1.full.1000$f.miss],y1.sem.imp$Attn[year1.full.1000$f.miss])
+cor(y1.sem.full1000.imp$Attn[year1.full.1000$f.miss],y1.sem.imp$Attn[year1.full.1000$f.miss])
+#[1] 0.9637267
+
+# Figure for supplemental
+
+jpeg(filename = "imputed_complete_comparison.jpg",width = 5,height = 5,units = "in",res=300)
+
+plot(y1.sem.imp$Attn[year1.full.1000$f.miss],y1.sem.full1000.imp$Attn[year1.full.1000$f.miss],
+     xlab="ADHD Sx., complete teacher data",
+     ylab="ADHD Sx., missing teacher data",pch=16,
+    col=rgb(.13,.59,.89,.5))
+abline(lm(y1.sem.full1000.imp$Attn[year1.full.1000$f.miss]~y1.sem.imp$Attn[year1.full.1000$f.miss]))
+
+dev.off()
+
+save.image("imputation_sensitivity_ANL.RData")
+
+#############################################################################
+######### 7. Factor Score Robustness and Test-Retest Correlations ###########
+#############################################################################
+                                           
+# make sure constrained model is robust when fit to all imputed data sets
+
+source("ABCD_family_subsample.R")
+base.SEM.full<-abcd.fam.subsample(base.full)
+y1.SEM.full<-year1.full[year1.full$subjectkey%in%base.SEM.full$subjectkey,]
+y2.SEM.full<-year2.full[year2.full$subjectkey%in%base.SEM.full$subjectkey,]
+
+# what proportion had teacher data imputed?
+
+sum(y1.SEM.full$subjectkey%in%year1.full[year1.full$t.missing,]$subjectkey)
+sum(y2.SEM.full$subjectkey%in%year2.full[year2.full$t.missing,]$subjectkey)
+
+all.c<-unique(c(cbcl.Attention.cols,cbcl.ADHD.cols,bpmt.Attention.cols))
+
+base.SEM.full<-cbind(subjectkey=base.SEM.full$subjectkey,
+                     complete(mice(data = base.SEM.full[,all.c],
+                             m = 1,print = FALSE,)))
+y1.SEM.full<-cbind(subjectkey=y1.SEM.full$subjectkey,
+                     complete(mice(data = y1.SEM.full[,all.c],
+                                   m = 1,print = FALSE,)))
+y2.SEM.full<-cbind(subjectkey=y2.SEM.full$subjectkey,
+                   complete(mice(data = y2.SEM.full[,all.c],
+                                 m = 1,print = FALSE,)))
+
+save(base.SEM.full,y1.SEM.full,y2.SEM.full,file="SEM_data_full_final.RData")
+
+comp.cbcl.cols<-unique(c(cbcl.ADHD.cols,cbcl.Attention.cols))
+cbcl.cols.final<-comp.cbcl.cols[!comp.cbcl.cols%in%c("cbcl_q01_p",
+                                                     "cbcl_q61_p")]
+
+Attn.cols.final<-c(bpmt.Attention.cols,comp.cbcl.cols)
+Attn.cols.final<-Attn.cols.final[!Attn.cols.final%in%c("cbcl_q13_p",
+                                                       "cbcl_q45_p",
+                                                       "cbcl_q62_p",
+                                                       "cbcl_q80_p")]
+
+bf.final <- paste(" Attn =~ ",paste(Attn.cols.final,collapse=" + "),
+                  " Parent =~ ",paste(cbcl.cols.final,collapse=" + "),
+                  " Teacher =~ ",paste(bpmt.Attention.cols,collapse=" + "),
+                  " Attn ~~ 0*Parent 
+                      Attn ~~ 0*Teacher
+                      Parent ~~ 0*Teacher
+                      ",sep="\n")
+
+
+base.full.model.final = cfa(bf.final,data=base.SEM.full,  
+                       std.lv=TRUE,
+                       orthogonal=TRUE,
+                       estimator = "WLSMV") 
+summary(base.full.model.final,fit=TRUE,standardized=TRUE)
+
+
+y1.full.model.final = cfa(bf.final,data=y1.SEM.full,  
+                     std.lv=TRUE,
+                     orthogonal=TRUE,
+                     estimator = "WLSMV") 
+summary(y1.full.model.final,fit=TRUE,standardized=TRUE)
+
+y2.full.model.final = cfa(bf.final,data=y2.SEM.full,  
+                          std.lv=TRUE,
+                          orthogonal=TRUE,
+                          estimator = "WLSMV") 
+summary(y2.full.model.final,fit=TRUE,standardized=TRUE)
+
+
+
+write.csv(summary(y1.full.model.final,fit=TRUE,standardized=TRUE)$PE,
+          file="loadings_constrained_full_y1.csv")
+
+write.csv(summary(y2.full.model.final,fit=TRUE,standardized=TRUE)$PE,
+          file="loadings_constrained_full_y2.csv")
+
+
+# factor scores across all models and data sets 
+
+base.SEM.full$Gen.bmod<-lavPredict(base.full.model.final)[,"Attn"]
+
+base.SEM.full$Gen.y1mod<-lavPredict(y1.full.model.final,newdata = base.SEM.full)[,"Attn"]
+
+base.SEM.full$Gen.y2mod<-lavPredict(y2.full.model.final,newdata = base.SEM.full)[,"Attn"]
+
+y1.SEM.full$Gen.bmod<-lavPredict(base.full.model.final,newdata = y1.SEM.full)[,"Attn"]
+
+y1.SEM.full$Gen.y1mod<-lavPredict(y1.full.model.final)[,"Attn"]
+
+y1.SEM.full$Gen.y2mod<-lavPredict(y2.full.model.final,newdata = y1.SEM.full)[,"Attn"]
+
+y1.SEM.full$Gen.y1c<-lavPredict(y1.model.final,newdata = y1.SEM.full)[,"Attn"]
+
+
+y2.SEM.full$Gen.bmod<-lavPredict(base.full.model.final,newdata = y2.SEM.full)[,"Attn"]
+
+y2.SEM.full$Gen.y1mod<-lavPredict(y1.full.model.final,newdata = y2.SEM.full)[,"Attn"]
+
+y2.SEM.full$Gen.y2mod<-lavPredict(y2.full.model.final)[,"Attn"]
+
+y2.SEM.full$Gen.y1c<-lavPredict(y1.model.final,newdata = y2.SEM.full)[,"Attn"]
+
+# relations between general factors from each of the models 
+# (y1, baseline) when applied to each data set
+
+cor(base.SEM.full[,c("Gen.bmod","Gen.y1mod","Gen.y2mod")])
+                                           
+cor(y1.SEM.full[,c("Gen.bmod","Gen.y1mod","Gen.y2mod","Gen.y1c")])
+
+cor(y2.SEM.full[,c("Gen.bmod","Gen.y1mod","Gen.y2mod","Gen.y1c")])
+
+# test-retest correlation
+
+ids.both.y1<-base.SEM.full$subjectkey[base.SEM.full$subjectkey %in% y1.SEM.full$subjectkey]
+ids.both.y2<-base.SEM.full$subjectkey[base.SEM.full$subjectkey %in% y2.SEM.full$subjectkey]
+fs.cols.y1<-c("subjectkey","Gen.bmod","Gen.y1mod")
+fs.cols.y2<-c("subjectkey","Gen.bmod","Gen.y2mod")
+
+base.ids.both.y1<-base.SEM.full[base.SEM.full$subjectkey%in%ids.both.y1,fs.cols.y1]
+y1.ids.both<-y1.SEM.full[y1.SEM.full$subjectkey%in%ids.both.y1,fs.cols.y1]
+
+base.ids.both.y2<-base.SEM.full[base.SEM.full$subjectkey%in%ids.both.y2,fs.cols.y2]
+y2.ids.both<-y2.SEM.full[y2.SEM.full$subjectkey%in%ids.both.y2,fs.cols.y2]
+
+colnames(base.ids.both.y1)<-c("subjectkey","Gen.bmod.base","Gen.y1mod.base")
+colnames(y1.ids.both)<-c("subjectkey","Gen.bmod.y1","Gen.y1mod.y1")
+
+colnames(base.ids.both.y2)<-c("subjectkey","Gen.bmod.base","Gen.y2mod.base")
+colnames(y2.ids.both)<-c("subjectkey","Gen.bmod.y2","Gen.y2mod.y2")
+
+
+test.retest.y1<-merge(base.ids.both.y1,y1.ids.both,by="subjectkey")
+test.retest.y2<-merge(base.ids.both.y2,y2.ids.both,by="subjectkey")
+
+#model fit separately to each sample
+
+ICC(test.retest.y1[,c("Gen.bmod.base","Gen.y1mod.y1")])
+
+ICC(test.retest.y2[,c("Gen.bmod.base","Gen.y2mod.y2")])
+
+# outcome model fit to both samples
+
+ICC(test.retest.y1[,c("Gen.y1mod.base","Gen.y1mod.y1")])
+
+ICC(test.retest.y2[,c("Gen.y2mod.base","Gen.y2mod.y2")])
+
+cor(test.retest.y1[-1])
+
+cor(test.retest.y2[-1])
 
