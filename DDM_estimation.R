@@ -1,51 +1,51 @@
-
 rm(list=ls())
 source ("dmc/dmc.R")
+source("read_abcd_r1.R")
 
 #####################################################################
 #####################################################################
-############## N-back task DDM ######################################
+############## format data and select subsamples ####################
 #####################################################################
 #####################################################################
 
-#########################################################
-####### format data and apply exclusion criteria ########
-#########################################################
+
+################################################################
+####### format n-back data and apply exclusion criteria ########
+################################################################
 
 # load trial-level n-back data, merged across all 
 # baseline participants (once downloaded from aws)
-abcd.r4.nback<-read.csv("nback_r4_revised.csv")
-
+abcd.nback<-read.csv("nback_revised.csv")
 
 # make DMC-based columns
 
-abcd.r4.nback$S<-as.character(abcd.r4.nback$enback_targettype)
-abcd.r4.nback[abcd.r4.nback$S=="target",]$S<-"tar"
-abcd.r4.nback[abcd.r4.nback$S=="lure",]$S<-"lur"
-abcd.r4.nback[abcd.r4.nback$S=="nonlure",]$S<-"non"
-abcd.r4.nback$S<-factor(abcd.r4.nback$S)
+abcd.nback$S<-as.character(abcd.nback$enback_targettype)
+abcd.nback[abcd.nback$S=="target",]$S<-"tar"
+abcd.nback[abcd.nback$S=="lure",]$S<-"lur"
+abcd.nback[abcd.nback$S=="nonlure",]$S<-"non"
+abcd.nback$S<-factor(abcd.nback$S)
 
-abcd.r4.nback$R<-NA
-abcd.r4.nback[abcd.r4.nback$S%in%c("tar") & abcd.r4.nback$enback_stim_acc==1 & 
-                !is.na(abcd.r4.nback$enback_stim_resp),]$R<-"YES"
-abcd.r4.nback[abcd.r4.nback$S%in%c("tar") & abcd.r4.nback$enback_stim_acc==0 & 
-                !is.na(abcd.r4.nback$enback_stim_resp),]$R<-"NO"
-abcd.r4.nback[abcd.r4.nback$S%in%c("lur","non") & abcd.r4.nback$enback_stim_acc==1 & 
-                !is.na(abcd.r4.nback$enback_stim_resp),]$R<-"NO"
-abcd.r4.nback[abcd.r4.nback$S%in%c("lur","non") & abcd.r4.nback$enback_stim_acc==0 & 
-                !is.na(abcd.r4.nback$enback_stim_resp),]$R<-"YES"
-abcd.r4.nback$R<-factor(abcd.r4.nback$R)
+abcd.nback$R<-NA
+abcd.nback[abcd.nback$S%in%c("tar") & abcd.nback$enback_stim_acc==1 & 
+                !is.na(abcd.nback$enback_stim_resp),]$R<-"YES"
+abcd.nback[abcd.nback$S%in%c("tar") & abcd.nback$enback_stim_acc==0 & 
+                !is.na(abcd.nback$enback_stim_resp),]$R<-"NO"
+abcd.nback[abcd.nback$S%in%c("lur","non") & abcd.nback$enback_stim_acc==1 & 
+                !is.na(abcd.nback$enback_stim_resp),]$R<-"NO"
+abcd.nback[abcd.nback$S%in%c("lur","non") & abcd.nback$enback_stim_acc==0 & 
+                !is.na(abcd.nback$enback_stim_resp),]$R<-"YES"
+abcd.nback$R<-factor(abcd.nback$R)
 
-abcd.r4.nback$RT<-NA
-abcd.r4.nback[!is.na(abcd.r4.nback$R),]$RT<-abcd.r4.nback[!is.na(abcd.r4.nback$R),]$enback_stim_rt/1000
+abcd.nback$RT<-NA
+abcd.nback[!is.na(abcd.nback$R),]$RT<-abcd.nback[!is.na(abcd.nback$R),]$enback_stim_rt/1000
 
-abcd.r4.nback$acc<-NA
-abcd.r4.nback[!is.na(abcd.r4.nback$R),]$acc<-abcd.r4.nback[!is.na(abcd.r4.nback$R),]$enback_stim_acc
+abcd.nback$acc<-NA
+abcd.nback[!is.na(abcd.nback$R),]$acc<-abcd.nback[!is.na(abcd.nback$R),]$enback_stim_acc
 
 # separate into baseline and year 2
 
-nback.base<-abcd.r4.nback[abcd.r4.nback$eventname=="baseline_year_1_arm_1",]
-nback.y2<-abcd.r4.nback[abcd.r4.nback$eventname=="2_year_follow_up_y_arm_1",]
+nback.base<-abcd.nback[abcd.nback$eventname=="baseline_year_1_arm_1",]
+nback.y2<-abcd.nback[abcd.nback$eventname=="2_year_follow_up_y_arm_1",]
 
 #compute summary stats
 
@@ -110,7 +110,7 @@ for (r in 1:length(sum.base$s)){
   
 }
 
-#save(sum.base,file="sum_base_fits.RData")
+save(sum.base,file="sum_base_fits.RData")
 load("sum_base_fits.RData")
 
 # inclusion for each task
@@ -178,9 +178,154 @@ base.2.dmc<-base.2.dmc[base.2.dmc$RT>=0.200 | is.na(base.2.dmc$RT),]
 save(base.0.dmc,file="base_0_dat_DDM.RData")
 save(base.2.dmc,file="base_2_dat_DDM.RData")
 
-####################################################
-####### select hierarchical subsample (for priors)##
-####################################################
+################################################################
+####### format stop-signal and apply exclusion criteria ########
+################################################################
+
+# load trial-level data merged across participants
+# (once downloaded from aws and merged) 
+
+abcd.sst.raw<-read.csv("sst_revised.csv",stringsAsFactors = FALSE)
+
+#### format relevant columns for checks and model fitting ####
+
+# make DMC-friendly columns
+
+# subject
+abcd.sst.raw$s<-as.factor(abcd.sst.raw$subject) 
+
+# stimulus
+abcd.sst.raw$S<-NA
+abcd.sst.raw[abcd.sst.raw$sst_stim=="left_arrow",]$S<-"left"
+abcd.sst.raw[abcd.sst.raw$sst_stim=="right_arrow",]$S<-"right"
+abcd.sst.raw$S<-as.factor(abcd.sst.raw$S)
+
+# response
+abcd.sst.raw$R<-NA
+abcd.sst.raw[abcd.sst.raw$sst_primaryresp=="left_arrow" & 
+               !is.na(abcd.sst.raw$sst_primaryresp),]$R<-"LEFT"
+abcd.sst.raw[abcd.sst.raw$sst_primaryresp=="right_arrow" & 
+               !is.na(abcd.sst.raw$sst_primaryresp),]$R<-"RIGHT"
+abcd.sst.raw[abcd.sst.raw$sst_primaryresp=="" & 
+               !is.na(abcd.sst.raw$sst_primaryresp),]$R<-NA
+abcd.sst.raw$R<-as.factor(abcd.sst.raw$R)
+
+# stop vs go condition
+abcd.sst.raw$SS<-NA
+abcd.sst.raw[is.na(abcd.sst.raw$sst_ssd_dur),]$SS<-"GO"
+abcd.sst.raw[!is.na(abcd.sst.raw$sst_ssd_dur),]$SS<-"SS"
+abcd.sst.raw$SS<-as.factor(abcd.sst.raw$SS)
+
+# SSD (convert to seconds)
+abcd.sst.raw$SSD<-abcd.sst.raw$sst_ssd_dur/1000
+abcd.sst.raw[is.na(abcd.sst.raw$SSD),]$SSD<-Inf
+
+# RT (convert to seconds)
+abcd.sst.raw$RT<-abcd.sst.raw$sst_primaryrt/1000
+
+# Exclude "stop" trials for DDM fits
+
+abcd.sst.raw<-abcd.sst.raw[abcd.sst.raw$SS=="GO",]
+
+#### checks and exclusion criteria #######
+
+# specify summary data frame variables
+
+# subject number and wave
+base.subs<-unique(abcd.sst.raw[abcd.sst.raw$eventname=="baseline_year_1_arm_1",]$s)
+y2.subs<-unique(abcd.sst.raw[abcd.sst.raw$eventname=="2_year_follow_up_y_arm_1",]$s)
+
+sum.initial<-data.frame(base.subs,"base")
+colnames(sum.initial)<-c("s","wave")
+sum.tmp<-data.frame(y2.subs,"y2")
+colnames(sum.tmp)<-c("s","wave")
+sum.initial<-rbind(sum.initial,sum.tmp);rm(sum.tmp)
+
+sum.initial$go.acc<-NA # go trial choice accuracy
+sum.initial$p.go.omit<-NA # prob. of omission (non-response) on "go" trials
+sum.initial$go.mrt<-NA # mean RT on go trials (correct AND incorrect choices)
+sum.initial$go.sdrt<-NA # SD of RT on go trials (correct AND incorrect choices)
+
+# calculate all summary variables for each person
+for (s in unique(abcd.sst.raw$s)){
+  for (w in unique(abcd.sst.raw$eventname)){
+    if (length(abcd.sst.raw[abcd.sst.raw$s==s & abcd.sst.raw$eventname==w,]$s)>0){
+      
+      tmp<-abcd.sst.raw[abcd.sst.raw$s==s & abcd.sst.raw$eventname==w,]
+      wave<-"base";if(w=="2_year_follow_up_y_arm_1"){wave<-"y2"}
+      r<-(sum.initial$s==s & sum.initial$wave==wave)
+      
+      sum.initial[r,]$go.acc<-length(tmp[!is.na(tmp$R) & tmp$S==tolower(tmp$R) & tmp$SS=="GO",]$s)/length(tmp[!is.na(tmp$R) & tmp$SS=="GO",]$s)
+      sum.initial[r,]$p.go.omit<-length(tmp[is.na(tmp$RT) & tmp$SS=="GO",]$s)/length(tmp[tmp$SS=="GO",]$s)
+      sum.initial[r,]$go.mrt<-mean(tmp[tmp$SS=="GO",]$RT,na.rm = TRUE)
+      sum.initial[r,]$go.sdrt<-sd(tmp[tmp$SS=="GO",]$RT,na.rm = TRUE)
+    }
+  }}
+
+# basic inclusion criteria for DDM
+
+inc.sst.base<-sum.initial[sum.initial$go.acc>=.55 & 
+                            sum.initial$p.go.omit<=.25 &
+                            sum.initial$wave=="base","s"]
+
+inc.sst.y2<-sum.initial[sum.initial$go.acc>=.55 & 
+                          sum.initial$p.go.omit<=.25 &
+                          sum.initial$wave=="y2","s"]
+
+# break up into final base and y2 groups
+
+base.sst.dmc<-abcd.sst.raw[abcd.sst.raw$eventname=="baseline_year_1_arm_1"  & 
+                             abcd.sst.raw$subject%in%inc.sst.base,]
+base.sst.dmc<-base.sst.dmc[,c("subject","S","R","RT")]
+colnames(base.sst.dmc)<-c("s","S","R","RT")
+base.sst.dmc$s<-factor(base.sst.dmc$s)
+
+y2.sst.dmc<-abcd.sst.raw[abcd.sst.raw$eventname=="2_year_follow_up_y_arm_1"  & 
+                           abcd.sst.raw$subject%in%inc.sst.y2,]
+y2.sst.dmc<-y2.sst.dmc[,c("subject","S","R","RT")]
+colnames(y2.sst.dmc)<-c("s","S","R","RT")
+y2.sst.dmc$s<-factor(y2.sst.dmc$s)
+
+# identify RT bin at a which responding rises above chance in baseline
+
+base.RTs<-base.sst.dmc[!is.na(base.sst.dmc$RT),]
+base.RTs$acc<-(base.RTs$S==tolower(base.RTs$R))
+
+acc.by.bin<-data.frame(seq(0,.480,.02),seq(.02,.500,.02))
+colnames(acc.by.bin)<-c("lo","hi")
+acc.by.bin$n<-NA
+acc.by.bin$acc<-NA
+
+
+for (r in 1:length(acc.by.bin$lo)){
+  RT.acc<-base.RTs[base.RTs$RT>=acc.by.bin[r,"lo"] & 
+                     base.RTs$RT<acc.by.bin[r,"hi"]  ,]$acc
+  acc.by.bin[r,"n"]<-length(RT.acc)
+  acc.by.bin[r,"acc"]<-mean(RT.acc)
+}
+
+plot(acc.by.bin$lo,acc.by.bin$acc)
+
+# exclude fast guesses
+
+base.sst.dmc<-base.sst.dmc[base.sst.dmc$RT>=0.200 | is.na(base.sst.dmc$RT),]
+y2.sst.dmc<-y2.sst.dmc[y2.sst.dmc$RT>=0.200 | is.na(y2.sst.dmc$RT),]
+
+# treat RTs outside of the shortest possible response 
+# window (>1.700s) as omissions for the sake of the omission model
+
+base.sst.dmc[base.sst.dmc$RT>1.700 & !is.na(base.sst.dmc$RT),]$RT<-NA
+
+y2.sst.dmc[y2.sst.dmc$RT>1.700 & !is.na(y2.sst.dmc$RT),]$RT<-NA
+
+# save out
+save(base.sst.dmc,file="base_sst_dat_DDM200.RData")
+save(y2.sst.dmc,file="y2_sst_dat_DDM200.RData")
+
+
+######################################################
+####### select hierarchical subsamples (for priors) ##
+######################################################
 
 # exclude data from individuals with accuracy <50% and
 # omissions > 25% on either task
@@ -193,49 +338,36 @@ sum.base[sum.base$acc.2.overall<0.55 |
            sum.base$acc.2.omit>0.25 | is.na(sum.base$acc.2.overall),
          colnames(sum.base)[grepl(".2.",colnames(sum.base))] ]<-NA
 
-# identify subjects with acceptable data from both tasks
+sum.base.sst<-sum.initial[sum.initial$go.acc>=.55 & 
+                            sum.initial$p.go.omit<=.25 &
+                            sum.initial$wave=="base",]
 
-sum.base$include<-(is.na(sum.base$acc.0.omit)+is.na(sum.base$acc.2.omit))<1
+# identify subjects with acceptable data from both n-back tasks and the sst
 
-# load family data
-
-acspsw03<-read.delim("acspsw03.txt")
-acspsw03.labs<-acspsw03[1,]
-acspsw03<-data.frame(acspsw03[-1,])
-row.names(acspsw03)<-1:length(acspsw03[,1])
-
-fam.dat<-acspsw03[acspsw03$eventname=="baseline_year_1_arm_1",]
-fam.dat<-data.frame(s=fam.dat$subject,
-                    fam=fam.dat$rel_family_id)
-
-# identify singletons 
-
-singles<-table(fam.dat$fam)
-singles<-singles[singles==1]
-singles<-names(singles)
+sum.elig<-sum.base[(is.na(sum.base$acc.0.omit)+is.na(sum.base$acc.2.omit))<1,]
+sum.elig<-sum.elig[sum.elig$s%in%sum.base.sst$s,]
 
 # load eligible participant list
 
 ADHD_elig<-read.csv("hier_DDM_eligible_ADHD_proj.csv")
 
-# merge fam.dat with sum.base
-
-sum.fam<-merge(sum.base,fam.dat,by="s",all.x = TRUE)
-
 # only look at eligible individuals 
 
-sum.fam<-sum.fam[sum.fam$s%in%ADHD_elig$x,]
+sum.elig<-sum.elig[sum.elig$s%in%ADHD_elig$x,]
 
 # select subsample IDs at random
 
-sub.ids<-sum.fam[sum.fam$fam%in%singles & sum.fam$include,]
-
-sub.ids<-sample(sub.ids$s,size = 300,replace = FALSE)
+sub.ids<-sample(sum.elig$s,size = 300,replace = FALSE)
 
 write.csv(sub.ids,
-          file="nback_subsample_ADHD_project.csv",
+          file="subsample_ADHD_project.csv",
           row.names = FALSE)
 
+#####################################################################
+#####################################################################
+############## N-back task DDM ######################################
+#####################################################################
+#####################################################################
 
 #####################################################################
 ###### individual-level estimation: broad priors ####################
@@ -314,7 +446,7 @@ load("base_0_dat_DDM.RData")
 load("base_2_dat_DDM.RData")
 
 # independent subsample IDs only
-subsample<-read.csv("nback_subsample_ADHD_project.csv")
+subsample<-read.csv("subsample_ADHD_project.csv")
 
 base.0.dmc<-base.0.dmc[base.0.dmc$s%in%subsample$x,]
 base.0.dmc$s<-as.factor(as.character(base.0.dmc$s))
@@ -428,7 +560,7 @@ rm(list=ls())
 source ("dmc/dmc.R")
 load_model ("DDM","ddm_omit.R") 
 
-load("two_hier_y2_ADHD_project.RData")
+load("two_hier_ADHD_project.RData")
 
 cores=32
 
@@ -466,7 +598,6 @@ sim.Zero.hier <- h.post.predict.dmc(sZero.hier2,cores=3)
 sim.Two.hier <- h.post.predict.dmc(sTwo.hier2,cores=3)
 
 save(sim.Zero.hier,sim.Two.hier,file="nback_hier_fmri_project_pp.RData")
-#
 
 plot.pp.dmc(sim.Zero.hier,layout = c(1,3))
 
@@ -674,7 +805,6 @@ save(sTwo.base.second,file="two_ddm_inf_ADHD_second.RData")
 # using the RUN.dmc() function (with default parameters) as described
 # in the Dynamic Models of Choice tutorial: https://osf.io/pbwx8/
 
-
 ##############################################################
 ##### generate point estimates (posterior medians)############
 ##############################################################
@@ -714,9 +844,11 @@ y1.dat<-read.csv("year1_full_dat.csv")
 sample(unique(y1.dat$site_id_l),3,FALSE)
 # [1] "site17" "site01" "site05"
 
-s17.ids<-y1.dat[y1.dat$site_id_l=="site17",]$subjectkey
-s01.ids<-y1.dat[y1.dat$site_id_l=="site01",]$subjectkey
-s05.ids<-y1.dat[y1.dat$site_id_l=="site05",]$subjectkey
+abcd_lt01<-read.abcd("abcd_lt01.txt")
+
+s17.ids<-abcd_lt01[abcd_lt01$site_id_l=="site17" & abcd_lt01$eventname=="baseline_year_1_arm_1",]$subjectkey
+s01.ids<-abcd_lt01[abcd_lt01$site_id_l=="site01" & abcd_lt01$eventname=="baseline_year_1_arm_1",]$subjectkey
+s05.ids<-abcd_lt01[abcd_lt01$site_id_l=="site05" & abcd_lt01$eventname=="baseline_year_1_arm_1",]$subjectkey
 
 save(s17.ids,s01.ids,s05.ids,file="fit_IDs.RData")
 
@@ -794,209 +926,11 @@ sum.ddm<-merge(tmp0, tmp2,
 write.csv(sum.ddm,file="nback_postmedians_ADHD.csv",row.names = FALSE)
 
 
-
-
 #####################################################################
 #####################################################################
 ############## stop-signal task DDM #################################
 #####################################################################
 #####################################################################
-
-#########################################################
-####### format data and apply exclusion criteria ########
-#########################################################
-
-# load trial-level data merged across participants
-# (once downloaded from aws and merged) 
-
-abcd.sst.raw<-read.csv("sst_r4_revised.csv",stringsAsFactors = FALSE)
-
-#### format relevant columns for checks and model fitting ####
-
-# make DMC-friendly columns
-
-# subject
-abcd.sst.raw$s<-as.factor(abcd.sst.raw$subject) 
-
-# stimulus
-abcd.sst.raw$S<-NA
-abcd.sst.raw[abcd.sst.raw$sst_stim=="left_arrow",]$S<-"left"
-abcd.sst.raw[abcd.sst.raw$sst_stim=="right_arrow",]$S<-"right"
-abcd.sst.raw$S<-as.factor(abcd.sst.raw$S)
-
-# response
-abcd.sst.raw$R<-NA
-abcd.sst.raw[abcd.sst.raw$sst_primaryresp=="left_arrow" & 
-               !is.na(abcd.sst.raw$sst_primaryresp),]$R<-"LEFT"
-abcd.sst.raw[abcd.sst.raw$sst_primaryresp=="right_arrow" & 
-               !is.na(abcd.sst.raw$sst_primaryresp),]$R<-"RIGHT"
-abcd.sst.raw[abcd.sst.raw$sst_primaryresp=="" & 
-               !is.na(abcd.sst.raw$sst_primaryresp),]$R<-NA
-abcd.sst.raw$R<-as.factor(abcd.sst.raw$R)
-
-# stop vs go condition
-abcd.sst.raw$SS<-NA
-abcd.sst.raw[is.na(abcd.sst.raw$sst_ssd_dur),]$SS<-"GO"
-abcd.sst.raw[!is.na(abcd.sst.raw$sst_ssd_dur),]$SS<-"SS"
-abcd.sst.raw$SS<-as.factor(abcd.sst.raw$SS)
-
-# SSD (convert to seconds)
-abcd.sst.raw$SSD<-abcd.sst.raw$sst_ssd_dur/1000
-abcd.sst.raw[is.na(abcd.sst.raw$SSD),]$SSD<-Inf
-
-# RT (convert to seconds)
-abcd.sst.raw$RT<-abcd.sst.raw$sst_primaryrt/1000
-
-# Exclude "stop" trials for DDM fits
-
-abcd.sst.raw<-abcd.sst.raw[abcd.sst.raw$SS=="GO",]
-
-#### checks and exclusion criteria #######
-
-# specify summary data frame variables
-
-# subject number and wave
-base.subs<-unique(abcd.sst.raw[abcd.sst.raw$eventname=="baseline_year_1_arm_1",]$s)
-y2.subs<-unique(abcd.sst.raw[abcd.sst.raw$eventname=="2_year_follow_up_y_arm_1",]$s)
-
-sum.initial<-data.frame(base.subs,"base")
-colnames(sum.initial)<-c("s","wave")
-sum.tmp<-data.frame(y2.subs,"y2")
-colnames(sum.tmp)<-c("s","wave")
-sum.initial<-rbind(sum.initial,sum.tmp);rm(sum.tmp)
-
-sum.initial$go.acc<-NA # go trial choice accuracy
-sum.initial$p.go.omit<-NA # prob. of omission (non-response) on "go" trials
-sum.initial$go.mrt<-NA # mean RT on go trials (correct AND incorrect choices)
-sum.initial$go.sdrt<-NA # SD of RT on go trials (correct AND incorrect choices)
-
-# calculate all summary variables for each person
-for (s in unique(abcd.sst.raw$s)){
-  for (w in unique(abcd.sst.raw$eventname)){
-    if (length(abcd.sst.raw[abcd.sst.raw$s==s & abcd.sst.raw$eventname==w,]$s)>0){
-      
-      tmp<-abcd.sst.raw[abcd.sst.raw$s==s & abcd.sst.raw$eventname==w,]
-      wave<-"base";if(w=="2_year_follow_up_y_arm_1"){wave<-"y2"}
-      r<-(sum.initial$s==s & sum.initial$wave==wave)
-      
-      sum.initial[r,]$go.acc<-length(tmp[!is.na(tmp$R) & tmp$S==tolower(tmp$R) & tmp$SS=="GO",]$s)/length(tmp[!is.na(tmp$R) & tmp$SS=="GO",]$s)
-      sum.initial[r,]$p.go.omit<-length(tmp[is.na(tmp$RT) & tmp$SS=="GO",]$s)/length(tmp[tmp$SS=="GO",]$s)
-      sum.initial[r,]$go.mrt<-mean(tmp[tmp$SS=="GO",]$RT,na.rm = TRUE)
-      sum.initial[r,]$go.sdrt<-sd(tmp[tmp$SS=="GO",]$RT,na.rm = TRUE)
-    }
-  }}
-
-# basic inclusion criteria for DDM
-
-inc.sst.base<-sum.initial[sum.initial$go.acc>=.55 & 
-                            sum.initial$p.go.omit<=.25 &
-                            sum.initial$wave=="base","s"]
-
-inc.sst.y2<-sum.initial[sum.initial$go.acc>=.55 & 
-                          sum.initial$p.go.omit<=.25 &
-                          sum.initial$wave=="y2","s"]
-
-# break up into final base and y2 groups
-
-base.sst.dmc<-abcd.sst.raw[abcd.sst.raw$eventname=="baseline_year_1_arm_1"  & 
-                             abcd.sst.raw$subject%in%inc.sst.base,]
-base.sst.dmc<-base.sst.dmc[,c("subject","S","R","RT")]
-colnames(base.sst.dmc)<-c("s","S","R","RT")
-base.sst.dmc$s<-factor(base.sst.dmc$s)
-
-y2.sst.dmc<-abcd.sst.raw[abcd.sst.raw$eventname=="2_year_follow_up_y_arm_1"  & 
-                           abcd.sst.raw$subject%in%inc.sst.y2,]
-y2.sst.dmc<-y2.sst.dmc[,c("subject","S","R","RT")]
-colnames(y2.sst.dmc)<-c("s","S","R","RT")
-y2.sst.dmc$s<-factor(y2.sst.dmc$s)
-
-# identify RT bin at a which responding rises above chance in baseline
-
-base.RTs<-base.sst.dmc[!is.na(base.sst.dmc$RT),]
-base.RTs$acc<-(base.RTs$S==tolower(base.RTs$R))
-
-acc.by.bin<-data.frame(seq(0,.480,.02),seq(.02,.500,.02))
-colnames(acc.by.bin)<-c("lo","hi")
-acc.by.bin$n<-NA
-acc.by.bin$acc<-NA
-
-
-for (r in 1:length(acc.by.bin$lo)){
-  RT.acc<-base.RTs[base.RTs$RT>=acc.by.bin[r,"lo"] & 
-                     base.RTs$RT<acc.by.bin[r,"hi"]  ,]$acc
-  acc.by.bin[r,"n"]<-length(RT.acc)
-  acc.by.bin[r,"acc"]<-mean(RT.acc)
-}
-
-plot(acc.by.bin$lo,acc.by.bin$acc)
-
-# exclude fast guesses
-
-base.sst.dmc<-base.sst.dmc[base.sst.dmc$RT>=0.200 | is.na(base.sst.dmc$RT),]
-y2.sst.dmc<-y2.sst.dmc[y2.sst.dmc$RT>=0.200 | is.na(y2.sst.dmc$RT),]
-
-# treat RTs outside of the shortest possible response 
-# window (>1.700s) as omissions for the sake of the omission model
-
-base.sst.dmc[base.sst.dmc$RT>1.700 & !is.na(base.sst.dmc$RT),]$RT<-NA
-
-y2.sst.dmc[y2.sst.dmc$RT>1.700 & !is.na(y2.sst.dmc$RT),]$RT<-NA
-
-# save out
-save(base.sst.dmc,file="base_sst_dat_DDM200.RData")
-save(y2.sst.dmc,file="y2_sst_dat_DDM200.RData")
-
-
-####################################################
-####### select hierarchical subsample (for priors)##
-####################################################
-
-# exclude data from individuals with accuracy <50% and
-# omissions > 25% on either task
-
-sum.base<-sum.initial[sum.initial$go.acc>=.55 & 
-                        sum.initial$p.go.omit<=.25 &
-                        sum.initial$wave=="base",]
-
-# load family data
-
-acspsw03<-read.delim("acspsw03.txt")
-acspsw03.labs<-acspsw03[1,]
-acspsw03<-data.frame(acspsw03[-1,])
-row.names(acspsw03)<-1:length(acspsw03[,1])
-
-fam.dat<-acspsw03[acspsw03$eventname=="baseline_year_1_arm_1",]
-fam.dat<-data.frame(s=fam.dat$subject,
-                    fam=fam.dat$rel_family_id)
-
-# identify singletons 
-
-singles<-table(fam.dat$fam)
-singles<-singles[singles==1]
-singles<-names(singles)
-
-# load eligible participant list
-
-ADHD_elig<-read.csv("hier_DDM_eligible_ADHD_proj.csv")
-
-# merge fam.dat with sum.base
-
-sum.fam<-merge(sum.base,fam.dat,by="s",all.x = TRUE)
-
-# only look at eligible individuals 
-
-sum.fam<-sum.fam[sum.fam$s%in%ADHD_elig$x,]
-
-# select subsample IDs at random
-
-sub.ids<-sum.fam[sum.fam$fam%in%singles,]
-
-sub.ids<-sample(sub.ids$s,size = 300,replace = FALSE)
-
-write.csv(sub.ids,
-          file="sst_subsample_ADHD_project.csv",
-          row.names = FALSE)
-
 
 #####################################################################
 ###### individual-level estimation: broad priors ####################
@@ -1059,7 +993,7 @@ save(sSST.base.second,file="sst_base_ddm2_second.RData")
 
 load("base_sst_dat_DDM200.RData")
 
-subsample<-read.csv("sst_subsample_ADHD_project.csv")
+subsample<-read.csv("subsample_ADHD_project.csv")
 
 base.sst.dmc<-base.sst.dmc[base.sst.dmc$s%in%subsample$x,]
 base.sst.dmc$s<-as.factor(as.character(base.sst.dmc$s))
@@ -1236,7 +1170,7 @@ dev.off()
 
 load("base_sst_dat_DDM200.RData")
 
-subsample<-read.csv("sst_subsample_ADHD_project.csv")
+subsample<-read.csv("subsample_ADHD_project.csv")
 
 base.sst.dmc<-base.sst.dmc[!base.sst.dmc$s%in%subsample$x,]
 base.sst.dmc$s<-as.factor(as.character(base.sst.dmc$s))
@@ -1288,6 +1222,15 @@ save(sSST.base.second,file="sst_DDM_inf_ADHD_second.RData")
 # computer to estimate parameters for each participant in parallel
 # using the RUN.dmc() function (with default parameters) as described
 # in the Dynamic Models of Choice tutorial: https://osf.io/pbwx8/
+
+source("greatlakes.R")
+run.greatlakes.dmc("sst_DDM_inf_ADHD_first","DDM","ddm_omit.R","asweigar",
+                   "asweigar1",40,wall.hours=10)
+
+source("greatlakes.R")
+run.greatlakes.dmc("sst_DDM_inf_ADHD_second","DDM","ddm_omit.R","asweigar",
+                   "asweigar1",40,wall.hours=10)
+
 
 ##############################################################
 ##### generate point estimates (posterior medians)############
