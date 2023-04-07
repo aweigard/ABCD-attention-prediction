@@ -1051,13 +1051,13 @@ year2.full.v<-merge(year2.full.v,meds[,c("subjectkey","CAS.ADHD")],by="subjectke
 
 # save out data sets
 
-write.csv(base,file="base_full_dat.csv",row.names = F)
-write.csv(year1,file="year1_full_dat.csv",row.names = F)
-write.csv(year2,file="year2_full_dat.csv",row.names = F)
+write.csv(base,file="base_comp_dat.csv",row.names = F)
+write.csv(year1,file="year1_comp_dat.csv",row.names = F)
+write.csv(year2,file="year2_comp_dat.csv",row.names = F)
 
-write.csv(base.full,file="base_full_full_dat.csv",row.names = F)
-write.csv(year1.full,file="year1_full_full_dat.csv",row.names = F)
-write.csv(year2.full,file="year2_full_full_dat.csv",row.names = F)
+write.csv(base.full,file="base_full_dat.csv",row.names = F)
+write.csv(year1.full,file="year1_full_dat.csv",row.names = F)
+write.csv(year2.full,file="year2_full_dat.csv",row.names = F)
 
 write.csv(base.v,file="base_validation_dat.csv",row.names = F)
 write.csv(year1.v,file="year1_validation_dat.csv",row.names = F)
@@ -1082,7 +1082,7 @@ source("ABCD_family_subsample.R")
 
 base.SEM<-abcd.fam.subsample(base.p.dat)
 y1.SEM<-abcd.fam.subsample(y1.p.dat)
-save(base.SEM,y1.SEM,file="SEM_data_final.RData")
+#save(base.SEM,y1.SEM,file="SEM_data_final.RData")
 
 full.cbcl.cols<-unique(c(cbcl.ADHD.cols,cbcl.Attention.cols))
 
@@ -1279,7 +1279,7 @@ year1.full.1000[year1.full.1000$subjectkey%in%y1.fm,]$f.miss<-TRUE
 year1.full.1000[year1.full.1000$f.miss,bpmt.Attention.cols]<-NA
 
 
-save(year1.full,year2.full,year1.full.1000,file="missing_data_randomized.RData")
+#save(year1.full,year2.full,year1.full.1000,file="missing_data_randomized.RData")
 load("missing_data_randomized.RData")
 
 # Impute with MICE and run standard checks
@@ -1395,7 +1395,7 @@ cm.1000.y1-cor(complete(year1.1000.imp,action = 2)[year1.full.1000$f.miss,v.int]
 cor(complete(year1.1000.imp,action = 3)[year1.full.1000$f.miss,v.int])
 cm.1000.y1-cor(complete(year1.1000.imp,action = 3)[year1.full.1000$f.miss,v.int])
 
-### how does this affect factor structure and factor scores? #####
+# how does this affect factor structure and factor scores? 
 
 # data sets for comparison
 
@@ -1533,12 +1533,14 @@ abline(lm(y1.sem.full1000.imp$Attn[year1.full.1000$f.miss]~y1.sem.imp$Attn[year1
 
 dev.off()
 
+
 save.image("imputation_sensitivity_ANL.RData")
+
 
 #############################################################################
 ######### 7. Factor Score Robustness and Test-Retest Correlations ###########
 #############################################################################
-                                           
+
 # make sure constrained model is robust when fit to all imputed data sets
 
 source("ABCD_family_subsample.R")
@@ -1563,7 +1565,7 @@ y2.SEM.full<-cbind(subjectkey=y2.SEM.full$subjectkey,
                    complete(mice(data = y2.SEM.full[,all.c],
                                  m = 1,print = FALSE,)))
 
-save(base.SEM.full,y1.SEM.full,y2.SEM.full,file="SEM_data_full_final.RData")
+#save(base.SEM.full,y1.SEM.full,y2.SEM.full,file="SEM_data_full_final.RData")
 
 comp.cbcl.cols<-unique(c(cbcl.ADHD.cols,cbcl.Attention.cols))
 cbcl.cols.final<-comp.cbcl.cols[!comp.cbcl.cols%in%c("cbcl_q01_p",
@@ -1641,10 +1643,24 @@ y2.SEM.full$Gen.y1c<-lavPredict(y1.model.final,newdata = y2.SEM.full)[,"Attn"]
 # (y1, baseline) when applied to each data set
 
 cor(base.SEM.full[,c("Gen.bmod","Gen.y1mod","Gen.y2mod")])
-                                           
+#            Gen.bmod Gen.y1mod Gen.y2mod
+# Gen.bmod  1.0000000 0.9980846 0.9970255
+# Gen.y1mod 0.9980846 1.0000000 0.9950817
+# Gen.y2mod 0.9970255 0.9950817 1.0000000
+
 cor(y1.SEM.full[,c("Gen.bmod","Gen.y1mod","Gen.y2mod","Gen.y1c")])
+# Gen.bmod Gen.y1mod Gen.y2mod   Gen.y1c
+# Gen.bmod  1.0000000 0.9971996 0.9986680 0.9963873
+# Gen.y1mod 0.9971996 1.0000000 0.9976960 0.9997328
+# Gen.y2mod 0.9986680 0.9976960 1.0000000 0.9968584
+# Gen.y1c   0.9963873 0.9997328 0.9968584 1.0000000
 
 cor(y2.SEM.full[,c("Gen.bmod","Gen.y1mod","Gen.y2mod","Gen.y1c")])
+# Gen.bmod Gen.y1mod Gen.y2mod   Gen.y1c
+# Gen.bmod  1.0000000 0.9969907 0.9986327 0.9960986
+# Gen.y1mod 0.9969907 1.0000000 0.9976202 0.9997169
+# Gen.y2mod 0.9986327 0.9976202 1.0000000 0.9967353
+# Gen.y1c   0.9960986 0.9997169 0.9967353 1.0000000
 
 # test-retest correlation
 
